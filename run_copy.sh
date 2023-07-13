@@ -21,8 +21,10 @@ then
       three=$(grep Backend_Bound.Memory_Bound.L3_Bound tmp.txt |awk '{printf "%d\n", $5}')
       total=$(echo "$one $two $three"|awk '{printf "%d\n",$1+$2+$3}');
       if (( $(echo "$total > 9.9" |bc -l) ))				
-      then									        echo "Severe L1/L2/L3 bound problems ($total% of pipeline slots) identified, enabling cache miss sampling";
+      then
+	echo "Severe L1/L2/L3 bound problems ($total% of pipeline slots) identified, enabling cache miss sampling";
 	rm -rf perf.data						
 	perf record -g -C 0,1 -e mem_load_retired.l1_miss -- sleep 5 # mem_load_retired.l1_miss or mem_load_retired.l3_miss						perf report -g -F+srcline
       fi
-   fi										fi
+   fi									
+fi

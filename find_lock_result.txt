@@ -481,8 +481,8 @@ syscall_exit_to_user_mode                                                 ▒
 Not found the lock from __x64_sys_rt_sigreturn
 
 
-FOR OTHER LOCKS:
-eventfd1: extreme few samples collected during 5s
+FOR OTHER LOCKS: 
+eventfd1:
 - __x64_sys_read                                                            ▒
       - 22.22% ksys_read                                                       ▒
          - vfs_read                                                            ▒
@@ -546,6 +546,129 @@ __x64_sys_write                                                           ▒
       - 11.11% __fdget_pos                                                     ▒
            __fget_light                                                        ▒
            __fget_files
+
+fallocate2: cannot find spinlock_irq
+- __x64_sys_fallocate                                                       ▒
+      - 63.99% vfs_fallocate                                                   ◆
+         - 53.63% shmem_fallocate                                              ▒
+            - 51.81% shmem_getpage_gfp                                         ▒
+               - 22.54% shmem_add_to_page_cache                                ▒
+                  - 17.62% __mem_cgroup_charge                                 ▒
+                     - 17.10% charge_memcg                                     ▒
+                        - 16.06% try_charge_memcg                              ▒
+                             1.55% page_counter_try_charge                     ▒
+                       0.52% get_mem_cgroup_from_mm                            ▒
+                  - 1.81% xas_create_range                                     ▒
+                     - xas_create                                              ▒
+                        - 1.04% xas_expand.constprop.0                         ▒
+                             xas_alloc                                         ▒
+                           - kmem_cache_alloc                                  ▒
+                                0.52% get_obj_cgroup_from_current              ▒
+                                0.52% memcg_slab_post_alloc_hook               ▒
+                        - 0.78% xas_alloc                                      ▒
+                           - kmem_cache_alloc                                  ▒
+                                0.52% get_obj_cgroup_from_current              ▒
+                  - 1.30% __mod_lruvec_page_state                              ▒
+                     - 1.04% __mod_lruvec_state                                ▒
+                          0.52% __mod_node_page_state                          ▒
+                    1.04% __cgroup_throttle_swaprate                           ◆
+               - 17.36% shmem_alloc_and_acct_page                              ▒
+                  - 12.18% shmem_alloc_page                                    ▒
+                     - alloc_pages_vma                                         ▒
+                        - 11.40% __alloc_pages                                 ▒
+                           - get_page_from_freelist                            ▒
+                                6.22% rmqueue                                  ▒
+                                2.85% clear_page_erms                          ▒
+                                0.78% kernel_init_free_pages.part.0            ▒
+                  - 2.33% security_vm_enough_memory_mm                         ▒
+                     - __vm_enough_memory                                      ▒
+                          percpu_counter_add_batch                             ▒
+                    1.04% cap_vm_enough_memory                                 ▒
+                    0.78% __percpu_counter_compare                             ▒
+               - 6.74% lru_cache_add                                           ▒
+                  - __pagevec_lru_add                                          ▒
+                       6.48% __pagevec_lru_add_fn                              ▒
+               - 3.11% pagecache_get_page                                      ▒
+                    xas_load                                                   ▒
+                 1.30% shmem_is_huge                                           ▒
+                 0.52% xas_create_range                                        ▒
+              0.52% down_write                                                 ▒
+         - 8.03% security_file_permission                                      ▒
+            - 7.51% apparmor_file_permission                                   ▒
+                 aa_file_perm                                                  ▒
+              0.52% aa_file_perm                                               ▒
+           1.04% _raw_spin_lock                                                ▒
+           0.52% apparmor_file_permission                                      ▒
+        1.04% shmem_fallocate
+
+
+futex2:
+__x64_sys_futex                                                           ▒
+     do_futex                                                                  ▒
+     futex_wait                                                                ▒
+     futex_wait_setup                                                          ▒
+     get_futex_key                                                             ▒
+     get_user_pages_fast                                                       ▒
+     internal_get_user_pages_fast                                              ▒
+     lockless_pages_from_mm                                                    ▒
+     gup_pgd_range                                                             ◆
+     gup_pmd_range.constprop.0                                                 ▒
+     gup_pte_range                                                             ▒
+     try_grab_compound_head
+
+
+futex3:
+ __x64_sys_futex                                                           ▒
+     do_futex                                                                  ▒
+     futex_wait                                                                ▒
+     futex_wait_setup                                                          ▒
+     get_futex_key                                                             ▒
+     get_user_pages_fast                                                       ▒
+     internal_get_user_pages_fast                                              ▒
+     lockless_pages_from_mm                                                    ▒
+     asm_sysvec_apic_timer_interrupt                                           ▒
+     sysvec_apic_timer_interrupt                                               ◆
+     __sysvec_apic_timer_interrupt                                             ▒
+     hrtimer_interrupt                                                         ▒
+     __hrtimer_run_queues                                                      ▒
+     tick_sched_timer                                                          ▒
+     tick_sched_handle                                                         ▒
+   - update_process_times                                                      ▒
+        16.67% rcu_sched_clock_irq                                             ▒
+      - 16.67% scheduler_tick                                                  ▒
+           task_tick_fair                                                      ▒
+           update_curr                                                         ▒
+           cpuacct_charge
+
+futex4:
+syscall                                                                   ▒
+   - asm_sysvec_apic_timer_interrupt                                           ▒
+      - sysvec_apic_timer_interrupt                                            ▒
+        __sysvec_apic_timer_interrupt                                          ▒
+        hrtimer_interrupt                                                      ▒
+        __hrtimer_run_queues                                                   ▒
+        tick_sched_timer                                                       ▒
+        tick_sched_handle                                                      ▒
+        update_process_times                                                   ▒
+        scheduler_tick                                                         ▒
+        perf_event_task_tick                                                   ▒
+        _raw_spin_lock
+
+getppid1:
+__x64_sys_getppid                                                         ▒
+     __task_pid_nr_ns                                                          ▒
+     asm_sysvec_apic_timer_interrupt                                           ▒
+     sysvec_apic_timer_interrupt                                               ▒
+     __sysvec_apic_timer_interrupt                                             ▒
+     hrtimer_interrupt                                                         ▒
+     __hrtimer_run_queues                                                      ▒
+     tick_sched_timer                                                          ▒
+     tick_sched_handle                                                         ▒
+     update_process_times                                                      ▒
+     scheduler_tick                                                            ▒
+     task_tick_fair                                                            ◆
+     update_load_avg                                                           ▒
+     __update_load_avg_cfs_rq
 
 
 lock2:
@@ -644,3 +767,115 @@ __x64_sys_openat                                                          ▒
             - __check_object_size                                              ▒
               __check_object_size.part.0                                       ▒
         0.61% fd_install
+
+
+readseek2:
+    __x64_sys_read                                                            ▒
+     ksys_read                                                                 ▒
+     vfs_read                                                                  ▒
+   - new_sync_read                                                             ▒
+      - 92.86% shmem_file_read_iter                                            ▒
+         - 85.71% shmem_getpage_gfp                                            ▒
+            - pagecache_get_page                                               ▒
+               - 1.79% asm_sysvec_apic_timer_interrupt                         ▒
+                  - sysvec_apic_timer_interrupt                                ▒
+                       0.89% kvm_guest_apic_eoi_write                          ▒
+                     - 0.89% __sysvec_apic_timer_interrupt                     ▒
+                          hrtimer_interrupt                                    ▒
+                          __hrtimer_run_queues                                 ▒
+                          tick_sched_timer                                     ▒
+                          tick_sched_handle                                    ▒
+                          update_process_times                                 ▒
+                          scheduler_tick                                       ▒
+                          perf_adjust_freq_unthr_context                       ▒
+                 0.89% wait_on_page_bit_common                                 ▒
+           4.46% mark_page_accessed                                            ▒
+         - 0.89% touch_atime                                                   ▒
+              atime_needs_update                                               ▒
+              current_time                                                     ▒
+              ktime_get_coarse_real_ts64                                       ▒
+      - 6.25% unlock_page                                                      ▒
+         - asm_sysvec_apic_timer_interrupt                                     ▒
+           sysvec_apic_timer_interrupt                                         ◆
+           irq_exit_rcu                                                        ▒
+           __softirqentry_text_start                                           ▒
+           run_rebalance_domains                                               ▒
+           update_blocked_averages                                             ▒
+           update_rq_clock                                                     ▒
+           sched_clock_cpu                                                     ▒
+           sched_clock                                                         ▒
+           kvm_sched_clock_read                                                ▒
+           pvclock_clocksource_read
+
+
+tlb_flush1:
+- __x64_sys_madvise                                                         ◆
+      - 35.45% do_madvise.part.0                                               ▒
+         - 33.73% zap_page_range                                               ▒
+            - 25.03% tlb_finish_mmu                                            ▒
+               - 14.18% flush_tlb_mm_range                                     ▒
+                  - 12.78% kvm_flush_tlb_multi                                 ▒
+                     - 11.49% native_flush_tlb_multi                           ▒
+                        - on_each_cpu_cond_mask                                ▒
+                           - 9.24% smp_call_function_many_cond                 ▒
+                              - 2.04% kvm_smp_send_call_func_ipi               ▒
+                                 - 1.72% native_send_call_func_ipi             ▒
+                                    - 0.75% native_write_msr                   ▒
+                                         asm_sysvec_call_function_single       ▒
+                                       - sysvec_call_function_single           ▒
+                                            0.54% __sysvec_call_function_single▒
+                                      0.75% x2apic_send_IPI_allbutself         ▒
+                              - 1.83% send_call_function_single_ipi            ▒
+                                 - native_send_call_func_single_ipi            ▒
+                                    - 1.07% native_write_msr                   ▒
+                                       - 0.86% asm_sysvec_call_function        ▒
+                                          - sysvec_call_function               ◆
+                                             - 0.64% __sysvec_call_function    ▒
+                                                  0.54% generic_smp_call_functi▒
+                                      0.64% x2apic_send_IPI                    ▒
+                              - 0.64% asm_sysvec_call_function                 ▒
+                                   sysvec_call_function                        ▒
+                                   __sysvec_call_function                      ▒
+                                   generic_smp_call_function_single_interrupt  ▒
+                                0.64% _find_next_bit                           ▒
+                             1.29% llist_add_batch                             ▒
+                             0.54% memset_erms                                 ▒
+                       0.86% _find_next_bit                                    ▒
+               - 9.45% free_pages_and_swap_cache                               ▒
+                  - 8.81% release_pages                                        ▒
+                     - 3.22% __mem_cgroup_uncharge_list                        ▒
+                        - 2.69% uncharge_batch                                 ▒
+                           - 1.50% page_counter_uncharge                       ▒
+                                page_counter_cancel                            ▒
+                             0.86% __count_memcg_events                        ▒
+		     - 1.83% 1.83% free_unref_page_list                         
+                          free_unref_page_commit.constprop.0                   ▒
+                     - 1.18% lock_page_lruvec_irqsave                          ◆
+                          _raw_spin_lock_irqsave                               ▒
+                       0.54% __mod_zone_page_state                             ▒
+            - 3.65% unmap_single_vma                                           ▒
+               - 2.90% unmap_page_range                                        ▒
+                  - zap_pmd_range.isra.0                                       ▒
+                     - 0.97% zap_pte_range                                     ▒
+                          0.54% page_remove_rmap                               ▒
+                       0.54% _raw_spin_lock                                    ▒
+            - 2.69% lru_add_drain                                              ▒
+                 lru_add_drain_cpu                                             ▒
+               - __pagevec_lru_add                                             ▒
+                    0.97% __pagevec_lru_add_fn                                 ▒
+                  - 0.75% __lock_text_start                                    ▒
+                       0.64% __raw_callee_save___pv_queued_spin_unlock         ▒
+              2.04% tlb_gather_mmu                                             ▒
+         - 0.54% find_vma_prev                                                 ▒
+              vmacache_find                                                    ▒
+        0.64% up_read 
+
+
+
+Summary for other locks:
+1.extreme few samples collected during 5s for eventfd1,
+lock2, futex1-4,getppid1,pwrite1 
+2.for futex1, it doesn't give any miss from__x64_sys_
+functions 
+
+
