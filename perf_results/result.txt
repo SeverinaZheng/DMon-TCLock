@@ -1,0 +1,572 @@
+fallocate1_thre 14182 [000] 11049.231008:     100003 mem_load_retired.l1_miss: 
+	ffffffff8115cbf6 rcu_read_unlock_strict+0x6 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8115cbf6]
+	ffffffff813779dc __mem_cgroup_charge+0x1c ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff813779dc]
+	ffffffff812d2062 shmem_add_to_page_cache+0x162 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d2062]
+	ffffffff812d4f55 shmem_getpage_gfp+0x2c5 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d4f55]
+	ffffffff812d6fc7 shmem_fallocate+0x387 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d6fc7]
+	ffffffff8138a502 vfs_fallocate+0x152 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138a502]
+	ffffffff8138adc3 __x64_sys_fallocate+0x43 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138adc3]
+	ffffffff81daf119 do_syscall_64+0x59 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81daf119]
+	ffffffff81e00099 entry_SYSCALL_64_after_hwframe+0x61 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81e00099]
+	    7ffff7ea39bf fallocate64+0x5f (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  fallocate64.c:27
+	    555555555c0b pre_trampoline+0x8b (/home/ubuntu/TCLocks/src/benchmarks/will-it-scale/build/fallocate1_threads)
+  main.c:143
+	    7ffff7e1eb43 start_thread+0x2f3 (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  pthread_create.c:442
+
+fallocate1_thre 14182 [000] 11049.243096:     100003 mem_load_retired.l1_miss: 
+	ffffffff813b6f4b __fget_files+0x4b ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff813b6f4b]
+	ffffffff813b7099 __fget_light+0x39 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff813b7099]
+	ffffffff813b7103 __fdget+0x13 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff813b7103]
+	ffffffff8138ada6 __x64_sys_fallocate+0x26 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138ada6]
+	ffffffff81daf119 do_syscall_64+0x59 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81daf119]
+	ffffffff81e00099 entry_SYSCALL_64_after_hwframe+0x61 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81e00099]
+	    7ffff7ea39bf fallocate64+0x5f (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  fallocate64.c:27
+	    555555555c0b pre_trampoline+0x8b (/home/ubuntu/TCLocks/src/benchmarks/will-it-scale/build/fallocate1_threads)
+  main.c:143
+	    7ffff7e1eb43 start_thread+0x2f3 (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  pthread_create.c:442
+
+fallocate1_thre 14182 [000] 11049.255525:     100003 mem_load_retired.l1_miss: 
+	ffffffff812b65e0 find_lock_entries+0x130 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812b65e0]
+	ffffffff812d625b shmem_undo_range+0x11b ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d625b]
+	ffffffff812d73af shmem_setattr+0x20f ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d73af]
+	ffffffff813b642a notify_change+0x3ba ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff813b642a]
+	ffffffff81389b60 do_truncate+0x80 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81389b60]
+	ffffffff8138b5a5 do_sys_ftruncate+0x165 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138b5a5]
+	ffffffff8138b5fa __x64_sys_ftruncate+0x1a ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138b5fa]
+	ffffffff81daf119 do_syscall_64+0x59 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81daf119]
+	ffffffff81e00099 entry_SYSCALL_64_after_hwframe+0x61 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81e00099]
+	    7ffff7ea716b __ftruncate64+0xb (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  ftruncate64.c:29
+	    555555555c0b pre_trampoline+0x8b (/home/ubuntu/TCLocks/src/benchmarks/will-it-scale/build/fallocate1_threads)
+  main.c:143
+	    7ffff7e1eb43 start_thread+0x2f3 (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  pthread_create.c:442
+
+fallocate1_thre 14182 [000] 11049.267576:     100003 mem_load_retired.l1_miss: 
+	ffffffff81dbc6ea __cond_resched+0x1a ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81dbc6ea]
+	ffffffff8138a5d0 vfs_fallocate+0x220 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138a5d0]
+	ffffffff8138adc3 __x64_sys_fallocate+0x43 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138adc3]
+	ffffffff81daf119 do_syscall_64+0x59 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81daf119]
+	ffffffff81e00099 entry_SYSCALL_64_after_hwframe+0x61 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81e00099]
+	    7ffff7ea39bf fallocate64+0x5f (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  fallocate64.c:27
+	    555555555c0b pre_trampoline+0x8b (/home/ubuntu/TCLocks/src/benchmarks/will-it-scale/build/fallocate1_threads)
+  main.c:143
+	    7ffff7e1eb43 start_thread+0x2f3 (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  pthread_create.c:442
+
+fallocate1_thre 14182 [000] 11049.279908:     100003 mem_load_retired.l1_miss: 
+	ffffffff812c1551 __pagevec_lru_add_fn+0x31 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812c1551]
+	ffffffff812c44eb __pagevec_lru_add+0x6b ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812c44eb]
+	ffffffff812c45e6 lru_cache_add+0x56 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812c45e6]
+	ffffffff812d4f6d shmem_getpage_gfp+0x2dd ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d4f6d]
+	ffffffff812d6fc7 shmem_fallocate+0x387 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d6fc7]
+	ffffffff8138a502 vfs_fallocate+0x152 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138a502]
+	ffffffff8138adc3 __x64_sys_fallocate+0x43 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138adc3]
+	ffffffff81daf119 do_syscall_64+0x59 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81daf119]
+	ffffffff81e00099 entry_SYSCALL_64_after_hwframe+0x61 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81e00099]
+	    7ffff7ea39bf fallocate64+0x5f (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  fallocate64.c:27
+	    555555555c0b pre_trampoline+0x8b (/home/ubuntu/TCLocks/src/benchmarks/will-it-scale/build/fallocate1_threads)
+  main.c:143
+	    7ffff7e1eb43 start_thread+0x2f3 (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  pthread_create.c:442
+
+fallocate1_thre 14182 [000] 11049.292156:     100003 mem_load_retired.l1_miss: 
+	    7ffff7ea39bf fallocate64+0x5f (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  fallocate64.c:27
+	    555555555c0b pre_trampoline+0x8b (/home/ubuntu/TCLocks/src/benchmarks/will-it-scale/build/fallocate1_threads)
+  main.c:143
+	    7ffff7e1eb43 start_thread+0x2f3 (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  pthread_create.c:442
+
+fallocate1_thre 14182 [000] 11049.304170:     100003 mem_load_retired.l1_miss: 
+	ffffffff81374709 try_charge_memcg+0x59 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81374709]
+	ffffffff81375695 charge_memcg+0x45 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81375695]
+	ffffffff813779ed __mem_cgroup_charge+0x2d ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff813779ed]
+	ffffffff812d2062 shmem_add_to_page_cache+0x162 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d2062]
+	ffffffff812d4f55 shmem_getpage_gfp+0x2c5 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d4f55]
+	ffffffff812d6fc7 shmem_fallocate+0x387 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d6fc7]
+	ffffffff8138a502 vfs_fallocate+0x152 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138a502]
+	ffffffff8138adc3 __x64_sys_fallocate+0x43 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138adc3]
+	ffffffff81daf119 do_syscall_64+0x59 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81daf119]
+	ffffffff81e00099 entry_SYSCALL_64_after_hwframe+0x61 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81e00099]
+	    7ffff7ea39bf fallocate64+0x5f (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  fallocate64.c:27
+	    555555555c0b pre_trampoline+0x8b (/home/ubuntu/TCLocks/src/benchmarks/will-it-scale/build/fallocate1_threads)
+  main.c:143
+	    7ffff7e1eb43 start_thread+0x2f3 (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  pthread_create.c:442
+
+fallocate1_thre 14182 [000] 11049.316501:     100003 mem_load_retired.l1_miss: 
+	ffffffff816a5957 clear_page_erms+0x7 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff816a5957]
+	ffffffff81320fb3 get_page_from_freelist+0x353 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81320fb3]
+	ffffffff8132224e __alloc_pages+0x17e ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8132224e]
+	ffffffff813440bd alloc_pages_vma+0x9d ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff813440bd]
+	ffffffff812d1a37 shmem_alloc_page+0x87 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d1a37]
+	ffffffff812d1d9f shmem_alloc_and_acct_page+0x7f ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d1d9f]
+	ffffffff812d512d shmem_getpage_gfp+0x49d ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d512d]
+	ffffffff812d6fc7 shmem_fallocate+0x387 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d6fc7]
+	ffffffff8138a502 vfs_fallocate+0x152 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138a502]
+	ffffffff8138adc3 __x64_sys_fallocate+0x43 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138adc3]
+	ffffffff81daf119 do_syscall_64+0x59 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81daf119]
+	ffffffff81e00099 entry_SYSCALL_64_after_hwframe+0x61 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81e00099]
+	    7ffff7ea39bf fallocate64+0x5f (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  fallocate64.c:27
+	    555555555c0b pre_trampoline+0x8b (/home/ubuntu/TCLocks/src/benchmarks/will-it-scale/build/fallocate1_threads)
+  main.c:143
+	    7ffff7e1eb43 start_thread+0x2f3 (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  pthread_create.c:442
+
+fallocate1_thre 14182 [000] 11049.328729:     100003 mem_load_retired.l1_miss: 
+	ffffffff813b6f2c __fget_files+0x2c ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff813b6f2c]
+	ffffffff813b7099 __fget_light+0x39 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff813b7099]
+	ffffffff813b7103 __fdget+0x13 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff813b7103]
+	ffffffff8138ada6 __x64_sys_fallocate+0x26 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138ada6]
+	ffffffff81daf119 do_syscall_64+0x59 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81daf119]
+	ffffffff81e00099 entry_SYSCALL_64_after_hwframe+0x61 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81e00099]
+	    7ffff7ea39bf fallocate64+0x5f (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  fallocate64.c:27
+	    555555555c0b pre_trampoline+0x8b (/home/ubuntu/TCLocks/src/benchmarks/will-it-scale/build/fallocate1_threads)
+  main.c:143
+	    7ffff7e1eb43 start_thread+0x2f3 (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  pthread_create.c:442
+
+fallocate1_thre 14182 [000] 11049.340812:     100003 mem_load_retired.l1_miss: 
+	ffffffff81332685 __cgroup_throttle_swaprate+0x45 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81332685]
+	ffffffff812d20d4 shmem_add_to_page_cache+0x1d4 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d20d4]
+	ffffffff812d4f55 shmem_getpage_gfp+0x2c5 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d4f55]
+	ffffffff812d6fc7 shmem_fallocate+0x387 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d6fc7]
+	ffffffff8138a502 vfs_fallocate+0x152 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138a502]
+	ffffffff8138adc3 __x64_sys_fallocate+0x43 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138adc3]
+	ffffffff81daf119 do_syscall_64+0x59 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81daf119]
+	ffffffff81e00099 entry_SYSCALL_64_after_hwframe+0x61 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81e00099]
+	    7ffff7ea39bf fallocate64+0x5f (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  fallocate64.c:27
+	    555555555c0b pre_trampoline+0x8b (/home/ubuntu/TCLocks/src/benchmarks/will-it-scale/build/fallocate1_threads)
+  main.c:143
+	    7ffff7e1eb43 start_thread+0x2f3 (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  pthread_create.c:442
+
+fallocate1_thre 14182 [000] 11049.352863:     100003 mem_load_retired.l1_miss: 
+	ffffffff816a5957 clear_page_erms+0x7 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff816a5957]
+	ffffffff81320fb3 get_page_from_freelist+0x353 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81320fb3]
+	ffffffff8132224e __alloc_pages+0x17e ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8132224e]
+	ffffffff813440bd alloc_pages_vma+0x9d ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff813440bd]
+	ffffffff812d1a37 shmem_alloc_page+0x87 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d1a37]
+	ffffffff812d1d9f shmem_alloc_and_acct_page+0x7f ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d1d9f]
+	ffffffff812d512d shmem_getpage_gfp+0x49d ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d512d]
+	ffffffff812d6fc7 shmem_fallocate+0x387 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d6fc7]
+	ffffffff8138a502 vfs_fallocate+0x152 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138a502]
+	ffffffff8138adc3 __x64_sys_fallocate+0x43 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138adc3]
+	ffffffff81daf119 do_syscall_64+0x59 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81daf119]
+	ffffffff81e00099 entry_SYSCALL_64_after_hwframe+0x61 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81e00099]
+	    7ffff7ea39bf fallocate64+0x5f (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  fallocate64.c:27
+	    555555555c0b pre_trampoline+0x8b (/home/ubuntu/TCLocks/src/benchmarks/will-it-scale/build/fallocate1_threads)
+  main.c:143
+	    7ffff7e1eb43 start_thread+0x2f3 (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  pthread_create.c:442
+
+fallocate1_thre 14182 [000] 11049.365060:     100003 mem_load_retired.l1_miss: 
+	ffffffff81596890 apparmor_file_permission+0x50 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81596890]
+	ffffffff81536b2c security_file_permission+0x2c ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81536b2c]
+	ffffffff8138a47c vfs_fallocate+0xcc ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138a47c]
+	ffffffff8138adc3 __x64_sys_fallocate+0x43 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138adc3]
+	ffffffff81daf119 do_syscall_64+0x59 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81daf119]
+	ffffffff81e00099 entry_SYSCALL_64_after_hwframe+0x61 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81e00099]
+	    7ffff7ea39bf fallocate64+0x5f (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  fallocate64.c:27
+	    555555555c0b pre_trampoline+0x8b (/home/ubuntu/TCLocks/src/benchmarks/will-it-scale/build/fallocate1_threads)
+  main.c:143
+	    7ffff7e1eb43 start_thread+0x2f3 (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  pthread_create.c:442
+
+fallocate1_thre 14182 [000] 11049.376988:     100003 mem_load_retired.l1_miss: 
+	ffffffff812b65e0 find_lock_entries+0x130 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812b65e0]
+	ffffffff812d625b shmem_undo_range+0x11b ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d625b]
+	ffffffff812d73af shmem_setattr+0x20f ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d73af]
+	ffffffff813b642a notify_change+0x3ba ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff813b642a]
+	ffffffff81389b60 do_truncate+0x80 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81389b60]
+	ffffffff8138b5a5 do_sys_ftruncate+0x165 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138b5a5]
+	ffffffff8138b5fa __x64_sys_ftruncate+0x1a ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138b5fa]
+	ffffffff81daf119 do_syscall_64+0x59 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81daf119]
+	ffffffff81e00099 entry_SYSCALL_64_after_hwframe+0x61 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81e00099]
+	    7ffff7ea716b __ftruncate64+0xb (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  ftruncate64.c:29
+	    555555555c0b pre_trampoline+0x8b (/home/ubuntu/TCLocks/src/benchmarks/will-it-scale/build/fallocate1_threads)
+  main.c:143
+	    7ffff7e1eb43 start_thread+0x2f3 (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  pthread_create.c:442
+
+fallocate1_thre 14182 [000] 11049.389274:     100003 mem_load_retired.l1_miss: 
+	ffffffff81392225 fput+0x5 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81392225]
+	ffffffff81daf119 do_syscall_64+0x59 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81daf119]
+	ffffffff81e00099 entry_SYSCALL_64_after_hwframe+0x61 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81e00099]
+	    7ffff7ea39bf fallocate64+0x5f (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  fallocate64.c:27
+	    555555555c0b pre_trampoline+0x8b (/home/ubuntu/TCLocks/src/benchmarks/will-it-scale/build/fallocate1_threads)
+  main.c:143
+	    7ffff7e1eb43 start_thread+0x2f3 (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  pthread_create.c:442
+
+fallocate1_thre 14182 [000] 11049.401721:     100003 mem_load_retired.l1_miss: 
+	ffffffff81dc234b _raw_spin_lock_irq+0x1b ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81dc234b]
+	ffffffff812d20e9 shmem_add_to_page_cache+0x1e9 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d20e9]
+	ffffffff812d4f55 shmem_getpage_gfp+0x2c5 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d4f55]
+	ffffffff812d6fc7 shmem_fallocate+0x387 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d6fc7]
+	ffffffff8138a502 vfs_fallocate+0x152 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138a502]
+	ffffffff8138adc3 __x64_sys_fallocate+0x43 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138adc3]
+	ffffffff81daf119 do_syscall_64+0x59 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81daf119]
+	ffffffff81e00099 entry_SYSCALL_64_after_hwframe+0x61 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81e00099]
+	    7ffff7ea39bf fallocate64+0x5f (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  fallocate64.c:27
+	    555555555c0b pre_trampoline+0x8b (/home/ubuntu/TCLocks/src/benchmarks/will-it-scale/build/fallocate1_threads)
+  main.c:143
+	    7ffff7e1eb43 start_thread+0x2f3 (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  pthread_create.c:442
+
+fallocate1_thre 14182 [000] 11049.413855:     100003 mem_load_retired.l1_miss: 
+	ffffffff8167a472 percpu_counter_add_batch+0x32 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8167a472]
+	ffffffff81537061 security_vm_enough_memory_mm+0x51 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81537061]
+	ffffffff812d1e96 shmem_alloc_and_acct_page+0x176 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d1e96]
+	ffffffff812d512d shmem_getpage_gfp+0x49d ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d512d]
+	ffffffff812d6fc7 shmem_fallocate+0x387 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d6fc7]
+	ffffffff8138a502 vfs_fallocate+0x152 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138a502]
+	ffffffff8138adc3 __x64_sys_fallocate+0x43 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138adc3]
+	ffffffff81daf119 do_syscall_64+0x59 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81daf119]
+	ffffffff81e00099 entry_SYSCALL_64_after_hwframe+0x61 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81e00099]
+	    7ffff7ea39bf fallocate64+0x5f (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  fallocate64.c:27
+	    555555555c0b pre_trampoline+0x8b (/home/ubuntu/TCLocks/src/benchmarks/will-it-scale/build/fallocate1_threads)
+  main.c:143
+	    7ffff7e1eb43 start_thread+0x2f3 (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  pthread_create.c:442
+
+fallocate1_thre 14182 [000] 11049.426096:     100003 mem_load_retired.l1_miss: 
+	ffffffff8137379f __mod_lruvec_page_state+0x6f ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8137379f]
+	ffffffff812d21c5 shmem_add_to_page_cache+0x2c5 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d21c5]
+	ffffffff812d4f55 shmem_getpage_gfp+0x2c5 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d4f55]
+	ffffffff812d6fc7 shmem_fallocate+0x387 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d6fc7]
+	ffffffff8138a502 vfs_fallocate+0x152 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138a502]
+	ffffffff8138adc3 __x64_sys_fallocate+0x43 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138adc3]
+	ffffffff81daf119 do_syscall_64+0x59 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81daf119]
+	ffffffff81e00099 entry_SYSCALL_64_after_hwframe+0x61 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81e00099]
+	    7ffff7ea39bf fallocate64+0x5f (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  fallocate64.c:27
+	    555555555c0b pre_trampoline+0x8b (/home/ubuntu/TCLocks/src/benchmarks/will-it-scale/build/fallocate1_threads)
+  main.c:143
+	    7ffff7e1eb43 start_thread+0x2f3 (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  pthread_create.c:442
+
+fallocate1_thre 14182 [000] 11049.438263:     100003 mem_load_retired.l1_miss: 
+	ffffffff816a5957 clear_page_erms+0x7 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff816a5957]
+	ffffffff81320fb3 get_page_from_freelist+0x353 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81320fb3]
+	ffffffff8132224e __alloc_pages+0x17e ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8132224e]
+	ffffffff813440bd alloc_pages_vma+0x9d ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff813440bd]
+	ffffffff812d1a37 shmem_alloc_page+0x87 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d1a37]
+	ffffffff812d1d9f shmem_alloc_and_acct_page+0x7f ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d1d9f]
+	ffffffff812d512d shmem_getpage_gfp+0x49d ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d512d]
+	ffffffff812d6fc7 shmem_fallocate+0x387 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d6fc7]
+	ffffffff8138a502 vfs_fallocate+0x152 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138a502]
+	ffffffff8138adc3 __x64_sys_fallocate+0x43 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138adc3]
+	ffffffff81daf119 do_syscall_64+0x59 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81daf119]
+	ffffffff81e00099 entry_SYSCALL_64_after_hwframe+0x61 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81e00099]
+	    7ffff7ea39bf fallocate64+0x5f (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  fallocate64.c:27
+	    555555555c0b pre_trampoline+0x8b (/home/ubuntu/TCLocks/src/benchmarks/will-it-scale/build/fallocate1_threads)
+  main.c:143
+	    7ffff7e1eb43 start_thread+0x2f3 (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  pthread_create.c:442
+
+fallocate1_thre 14182 [000] 11049.450537:     100003 mem_load_retired.l1_miss: 
+	ffffffff81372817 __mod_memcg_lruvec_state+0x87 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81372817]
+	ffffffff81373717 __mod_lruvec_state+0x37 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81373717]
+	ffffffff81373796 __mod_lruvec_page_state+0x66 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81373796]
+	ffffffff812d21c5 shmem_add_to_page_cache+0x2c5 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d21c5]
+	ffffffff812d4f55 shmem_getpage_gfp+0x2c5 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d4f55]
+	ffffffff812d6fc7 shmem_fallocate+0x387 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d6fc7]
+	ffffffff8138a502 vfs_fallocate+0x152 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138a502]
+	ffffffff8138adc3 __x64_sys_fallocate+0x43 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138adc3]
+	ffffffff81daf119 do_syscall_64+0x59 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81daf119]
+	ffffffff81e00099 entry_SYSCALL_64_after_hwframe+0x61 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81e00099]
+	    7ffff7ea39bf fallocate64+0x5f (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  fallocate64.c:27
+	    555555555c0b pre_trampoline+0x8b (/home/ubuntu/TCLocks/src/benchmarks/will-it-scale/build/fallocate1_threads)
+  main.c:143
+	    7ffff7e1eb43 start_thread+0x2f3 (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  pthread_create.c:442
+
+fallocate1_thre 14182 [000] 11049.462653:     100003 mem_load_retired.l1_miss: 
+	ffffffff811ac2fd cgroup_rstat_updated+0x5d ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff811ac2fd]
+	ffffffff81373be5 mem_cgroup_charge_statistics.constprop.0+0x35 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81373be5]
+	ffffffff813756b7 charge_memcg+0x67 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff813756b7]
+	ffffffff813779ed __mem_cgroup_charge+0x2d ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff813779ed]
+	ffffffff812d2062 shmem_add_to_page_cache+0x162 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d2062]
+	ffffffff812d4f55 shmem_getpage_gfp+0x2c5 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d4f55]
+	ffffffff812d6fc7 shmem_fallocate+0x387 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d6fc7]
+	ffffffff8138a502 vfs_fallocate+0x152 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138a502]
+	ffffffff8138adc3 __x64_sys_fallocate+0x43 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138adc3]
+	ffffffff81daf119 do_syscall_64+0x59 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81daf119]
+	ffffffff81e00099 entry_SYSCALL_64_after_hwframe+0x61 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81e00099]
+	    7ffff7ea39bf fallocate64+0x5f (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  fallocate64.c:27
+	    555555555c0b pre_trampoline+0x8b (/home/ubuntu/TCLocks/src/benchmarks/will-it-scale/build/fallocate1_threads)
+  main.c:143
+	    7ffff7e1eb43 start_thread+0x2f3 (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  pthread_create.c:442
+
+fallocate1_thre 14182 [000] 11049.474606:     100003 mem_load_retired.l1_miss: 
+	ffffffff81dc2210 _raw_spin_lock+0x10 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81dc2210]
+	ffffffff8138a502 vfs_fallocate+0x152 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138a502]
+	ffffffff8138adc3 __x64_sys_fallocate+0x43 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138adc3]
+	ffffffff81daf119 do_syscall_64+0x59 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81daf119]
+	ffffffff81e00099 entry_SYSCALL_64_after_hwframe+0x61 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81e00099]
+	    7ffff7ea39bf fallocate64+0x5f (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  fallocate64.c:27
+	    555555555c0b pre_trampoline+0x8b (/home/ubuntu/TCLocks/src/benchmarks/will-it-scale/build/fallocate1_threads)
+  main.c:143
+	    7ffff7e1eb43 start_thread+0x2f3 (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  pthread_create.c:442
+
+fallocate1_thre 14182 [000] 11049.486757:     100003 mem_load_retired.l1_miss: 
+	ffffffff81374709 try_charge_memcg+0x59 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81374709]
+	ffffffff81375695 charge_memcg+0x45 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81375695]
+	ffffffff813779ed __mem_cgroup_charge+0x2d ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff813779ed]
+	ffffffff812d2062 shmem_add_to_page_cache+0x162 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d2062]
+	ffffffff812d4f55 shmem_getpage_gfp+0x2c5 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d4f55]
+	ffffffff812d6fc7 shmem_fallocate+0x387 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d6fc7]
+	ffffffff8138a502 vfs_fallocate+0x152 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138a502]
+	ffffffff8138adc3 __x64_sys_fallocate+0x43 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138adc3]
+	ffffffff81daf119 do_syscall_64+0x59 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81daf119]
+	ffffffff81e00099 entry_SYSCALL_64_after_hwframe+0x61 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81e00099]
+	    7ffff7ea39bf fallocate64+0x5f (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  fallocate64.c:27
+	    555555555c0b pre_trampoline+0x8b (/home/ubuntu/TCLocks/src/benchmarks/will-it-scale/build/fallocate1_threads)
+  main.c:143
+	    7ffff7e1eb43 start_thread+0x2f3 (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  pthread_create.c:442
+
+fallocate1_thre 14182 [000] 11049.498843:     100003 mem_load_retired.l1_miss: 
+	ffffffff81dbc6ea __cond_resched+0x1a ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81dbc6ea]
+	ffffffff8138a5d0 vfs_fallocate+0x220 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138a5d0]
+	ffffffff8138adc3 __x64_sys_fallocate+0x43 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138adc3]
+	ffffffff81daf119 do_syscall_64+0x59 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81daf119]
+	ffffffff81e00099 entry_SYSCALL_64_after_hwframe+0x61 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81e00099]
+	    7ffff7ea39bf fallocate64+0x5f (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  fallocate64.c:27
+	    555555555c0b pre_trampoline+0x8b (/home/ubuntu/TCLocks/src/benchmarks/will-it-scale/build/fallocate1_threads)
+  main.c:143
+	    7ffff7e1eb43 start_thread+0x2f3 (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  pthread_create.c:442
+
+fallocate1_thre 14182 [000] 11049.510916:     100003 mem_load_retired.l1_miss: 
+	ffffffff81533476 cap_vm_enough_memory+0x16 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81533476]
+	ffffffff812d1e96 shmem_alloc_and_acct_page+0x176 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d1e96]
+	ffffffff812d512d shmem_getpage_gfp+0x49d ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d512d]
+	ffffffff812d6fc7 shmem_fallocate+0x387 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff812d6fc7]
+	ffffffff8138a502 vfs_fallocate+0x152 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138a502]
+	ffffffff8138adc3 __x64_sys_fallocate+0x43 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff8138adc3]
+	ffffffff81daf119 do_syscall_64+0x59 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81daf119]
+	ffffffff81e00099 entry_SYSCALL_64_after_hwframe+0x61 ([kernel.kallsyms])
+  [kernel.kallsyms][ffffffff81e00099]
+	    7ffff7ea39bf fallocate64+0x5f (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  fallocate64.c:27
+	    555555555c0b pre_trampoline+0x8b (/home/ubuntu/TCLocks/src/benchmarks/will-it-scale/build/fallocate1_threads)
+  main.c:143
+	    7ffff7e1eb43 start_thread+0x2f3 (/usr/lib/x86_64-linux-gnu/libc.so.6)
+  libc.so.6[94b43]
+
