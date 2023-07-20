@@ -6,7 +6,7 @@ import sys
 import os
 import re
 
-data_points = [1,2,4,8,16,28,56,84,112,140,168,196,224]
+data_points = [448]
 
 class linux_stat():
     def __init__(self, procstat='/proc/stat'):
@@ -88,8 +88,11 @@ if arch == 'ppc64':
 
 print('# core,total,fast,slow')
 
+working_dir='/home/syncord/SynCord/benchmarks/will-it-scale'
+total_path = working_dir +  '/build/%s_threads -t %d -s %d -n %d'
+
 for i in data_points:
-    c = './build/%s_threads -t %d -s %d -n %d' % (cmd, i, duration, cores_per_socket)
+    c = total_path % (cmd, i, duration, cores_per_socket)
     before = linux_stat()
     pipe = subprocess.Popen(setarch + ' ' + c, shell=True, stdout=subprocess.PIPE, text=True).stdout
     threads_tot = -1
