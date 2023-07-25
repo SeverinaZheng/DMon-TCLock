@@ -27,9 +27,9 @@ then
       total=$(echo "$one $two $three"|awk '{printf "%d\n",$1+$2+$3}');
       if (( $(echo "$total > 9.9" |bc -l) ))				
       then
-	echo "Severe L1/L2/L3 bound problems ($total% of pipeline slots) identified, enabling cache miss sampling";
-	rm -rf perf.data						
-	$PERF_PATH record -g -C 0,1 -e mem_load_retired.l1_miss -- sleep 5 # mem_load_retired.l1_miss or mem_load_retired.l3_miss						perf report -g -F+srcline
+		echo "Severe L1/L2/L3 bound problems ($total% of pipeline slots) identified, enabling cache miss sampling";
+		rm -rf perf.data						
+		$PERF_PATH record -g -C 0,1 -e mem_load_retired.l1_miss -- sleep 5 # mem_load_retired.l1_miss or mem_load_retired.l3_miss						perf report -g -F+srcline
       fi
    fi									
 fi
