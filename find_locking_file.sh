@@ -30,12 +30,25 @@ if [ -r "$target_path" ]; then
             else
                 ((line_number++))
                 if [[ $line == *"lock("* ]]; then
-                    hash_table[$line]=$line_number
                     echo "lock found '$line':'$line_number'"
                     # Extract the function name of the lock
                     func_name_with_brac=$(echo "$line" |  grep -oP "([^$sig_set()]*lock\()")
                     func_name=$(echo "$func_name_with_brac" |  grep -oP "[^\s]+lock")
-                    echo $func_name
+                    #echo $func_name
+
+                    # Distinguish between lock and unlock
+                    if [[ $func_name == *"unlock"* ]];then
+                        unlock_func_name=$(echo "$func_name" | grep -oP "[^\s]+(?=unlock)" | head -n1)
+                        if [[ hash_table[$unlock_func_name] -ne 0 ]]; then
+                            lock_name="$unlock_func_name lock"
+                            echo "find $lock_name"
+
+                        fi
+                    else
+                        lock_func_name=$(echo "$func_name" | grep -oP "[^\s]+(?=lock)" | head -n1)
+                        hash_table[$lock_func_name]=$line_number
+                    fi
+
 
                 fi
             fi
