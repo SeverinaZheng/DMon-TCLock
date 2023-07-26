@@ -6,6 +6,7 @@ SEARCH_STRING=" $TARGET_FUNCTION("
 target=$(find $SOURCE_PATH -type f -name "*.c" -exec grep -H $SEARCH_STRING {} + | grep -v ';$')
 #echo $target
 target_path="${target%%:*}"
+sig_set="()|*.&="
 echo $target_path
 declare -A hash_table
 
@@ -27,11 +28,16 @@ if [ -r "$target_path" ]; then
                 echo "end of function '$TARGET_FUNCTION'"
                 find_the_function=0
             else
-                #echo "$line"
                 ((line_number++))
                 if [[ $line == *"lock("* ]]; then
                     hash_table[$line]=$line_number
-                    echo "lock found '$line'"
+                    echo "lock found '$line':'$line_number'"
+                    # Extract the function name of the lock
+                    func_name_with=$(echo "$line" |  grep -oP "(?<=[$sig_set])([^$sig_set()]*lock)")
+                    func_name_without=$(echo "$line" |  grep -oP "(?<![$sig_set])([^$sig_set()]*lock)")
+                    echo $func_name_with
+                    echo $func_name_without
+
                 fi
             fi
         fi
