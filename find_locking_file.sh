@@ -33,10 +33,9 @@ if [ -r "$target_path" ]; then
                     hash_table[$line]=$line_number
                     echo "lock found '$line':'$line_number'"
                     # Extract the function name of the lock
-                    func_name_with=$(echo "$line" |  grep -oP "(?<=[$sig_set])([^$sig_set()]*lock)")
-                    func_name_without=$(echo "$line" |  grep -oP "(?<![$sig_set])([^$sig_set()]*lock)")
-                    echo $func_name_with
-                    echo $func_name_without
+                    func_name_with_brac=$(echo "$line" |  grep -oP "([^$sig_set()]*lock\()")
+                    func_name=$(echo "$func_name_with_brac" |  grep -oP "[^\s]+lock")
+                    echo $func_name
 
                 fi
             fi
