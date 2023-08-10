@@ -25,10 +25,6 @@ def find_function_content(file_path, function_name,line_number):
                         next_line = lines[int(line_number)]
                         return [next_line]
 
-                    # for something like #define xxx do { }while(0)
-                    if line.startswith("#define") and ( "{ }" in line):
-                        return None
-
                     # for something like #define xxx \
                     #                       do{...}while(...)
                     if line.startswith("#define") and line.find("\\") > 0 and lines[int(line_number)].find("{") > 0 and lines[int(line_number)].find("}") > 0:
@@ -39,12 +35,7 @@ def find_function_content(file_path, function_name,line_number):
                         print(f"next line : {output_list}")
                         return output_list
 
-                    # for something like void ... acquire(lock);
-                    if line.endswith(";"):
-                        return None
-
-
-                    if line.startswith("#define") and (not line.endswith("\\")):
+                    if line.startswith("#define") and not line.endswith("\\"):
                         start_index = i
                         end_index = i + 1
                         is_mapping = True
@@ -112,17 +103,14 @@ def execute_global_command(function_name,target_directory):
         command1 = f"cscope -dL -1 {function_name}"
         command2 = "awk '{print $1,$3}'"
         command3 = "awk '/^(kernel\/|include\/)/'"
-        command4 = "awk '!/debug/'"
 
         process1 = subprocess.Popen(command1, stdout=subprocess.PIPE, shell=True, cwd=target_directory)
         process2 = subprocess.Popen(command2, stdin=process1.stdout, stdout=subprocess.PIPE, shell=True, cwd=target_directory)
         process3 = subprocess.Popen(command3, stdin=process2.stdout, stdout=subprocess.PIPE, shell=True, cwd=target_directory)
-        process4 = subprocess.Popen(command4, stdin=process3.stdout, stdout=subprocess.PIPE, shell=True, cwd=target_directory)
 
-        process3.stdout.close()
         process2.stdout.close()
         process1.stdout.close()
-        output = process4.communicate()[0].decode('utf-8')
+        output = process3.communicate()[0].decode('utf-8')
 
         return output
     except subprocess.CalledProcessError as e:
@@ -143,23 +131,19 @@ def find_call_stack(function_name,source_path):
                 function_path = parts[i]
                 function_path = f"{source_path}/{function_path}"
                 # print(f"find {function_path}")
-                # print(f"find {line_number}")
                 content = find_function_content(function_path,function_name,line_number)
                 arguments = find_function_arguments(function_path,function_name,line_number)
-                if (content is None):
-                    continue
-                # print(f"content: {content}")
+                print(f"content: {content}")
                 callee = None
-                found = False
                 for instruction in content:
                     instruction = instruction.strip()
-                    # print(f"instruction : {instruction}")
+                    #print(f"instruction : {instruction}")
                     index_of_parentheses = instruction.find("(")
                     if index_of_parentheses != -1:
                         callee = instruction[:index_of_parentheses].strip()
                         if callee in target_bpf_functions:
-                            print (f"End of Stack: Found:{function_name}")
-                            return True
+                            print ("End of Stack: Found")
+                            return None
                         if callee.find("spin_lock") == -1:
                             # in case that it does not call directly but passing to it as argument
                             #print("not found in this function")
@@ -172,17 +156,15 @@ def find_call_stack(function_name,source_path):
                                 parameters = instruction[start + 1:end].split(",")
                                 callee = find_call_stack_with_arguments(callee, source_path,parameters)
                                 if callee is not None:
-                                    if find_call_stack(callee, source_path):
-                                        print(f"valid caller{function_name}, {function_path},{line_number}")
-                                        found = True
+                                    print (f"found in callee: {callee}")
+                                    find_call_stack(callee, source_path)
 
 
                         else:
-                            if find_call_stack(callee, source_path):
-                                print(f"valid caller{function_name}, {function_path},{line_number}")
-                                found = True
-            return found
-
+                            print (f"callee : {callee}")
+                            find_call_stack(callee, source_path)
+                    else:
+                        print("invalid function call")
 
 
     except Exception as e:
@@ -191,18 +173,17 @@ def find_call_stack(function_name,source_path):
 
 def find_call_stack_with_arguments(function_name,source_path, parameters):
     try:
-        # print(f"argument {function_name}")
         function_info = execute_global_command(function_name,source_path).strip()
         parts = function_info.split()
         if len(parts) % 2 != 0:
             print("The list must be even length")
         else:
             for i in range(0,len(parts),2):
-                line_number = parts[i+1]
-                function_path = parts[i]
+                line_number = parts[i]
+                function_path = parts[i + 1]
                 function_path = f"{source_path}/{function_path}"
-                # print(f"find {function_path}")
-                # print(f"{line_number}")
+                #print(f"find {function_path}")
+                #print(f"{line_number}")
 
                 content = find_function_content(function_path,function_name,line_number)
                 arguments = find_function_arguments(function_path,function_name,line_number)
@@ -221,7 +202,7 @@ def find_call_stack_with_arguments(function_name,source_path, parameters):
                             return callee
 
                     # else:
-                    #   print("invalid function call")
+                    #    print("invalid function call")
                 return None
 
 
@@ -231,7 +212,6 @@ def find_call_stack_with_arguments(function_name,source_path, parameters):
 
 
 if __name__ == "__main__":
-    # source_path = "/usr/src/linux-source-5.4.0"
-    source_path = "/home/syncord/SynCord-linux-base"
+    source_path = "/usr/src/linux-source-5.4.0"
     function_name = "spin_lock"
     find_call_stack(function_name,source_path)
