@@ -256,8 +256,21 @@ def find_call_stack_with_arguments(function_name,source_path, parameters,lock_un
     except Exception as e:
         print(f"An error occurred: {e}")
 
+def create_bpf_header(destination_path,my_bpf_path):
+    destination_function_path = destination_path + "/" + my_bpf_path
+    with open(destination_function_path, 'a') as destination_file:
+        destination_file.write("#ifndef MY_BPF_SPIN_H\n")
+        destination_file.write("#define MY_BPF_SPIN_H\n")
 
-def create_bpf_header(template_path, destination_path,my_bpf_path,lock_unlock):
+def end_bpf_header(destination_path,my_bpf_path):
+    destination_function_path = destination_path + "/" + my_bpf_path
+    with open(destination_function_path, 'a') as destination_file:
+        destination_file.write("#endif")
+
+
+
+
+def write_to_bpf_header(template_path, destination_path,my_bpf_path,lock_unlock):
     for function_info in valid_call_tree:
         parts = function_info.split(',',3)
         function_path = parts[0]
@@ -371,14 +384,18 @@ if __name__ == "__main__":
 
 
     if os.path.exists(destination_path):
+        shutil.rmtree(destination_path)
         print("destination already exists")
-    else:
-        shutil.copytree(template_path, destination_path)
+    shutil.copytree(template_path, destination_path)
+
+    create_bpf_header(destination_path,my_bpf_path)
 
     find_call_stack("spin_lock",template_path, "spin_lock")
-    create_bpf_header(template_path, destination_path,my_bpf_path,"spin_lock")
+    write_to_bpf_header(template_path, destination_path,my_bpf_path,"spin_lock")
     valid_call_tree = []
 
     find_call_stack("spin_unlock",template_path, "spin_unlock")
-    create_bpf_header(template_path, destination_path,my_bpf_path,"spin_unlock")
+    write_to_bpf_header(template_path, destination_path,my_bpf_path,"spin_unlock")
     valid_call_tree = []
+
+    end_bpf_header(destination_path,my_bpf_path)
