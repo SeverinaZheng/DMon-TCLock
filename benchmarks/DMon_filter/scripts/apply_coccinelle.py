@@ -30,14 +30,18 @@ def apply_coccinelle(file_path,file_name):
 
             # The new line to be added
             new_line = "#include <linux/my_bpf_spin_lock.h>\n"
-
+            found_include = False
+            inserted = False
             # Open the original file for reading and new file for writing
             with open(original_file_path, "r") as original_file, open(new_file_path, "w") as new_file:
                 # Write the new line to the new file
-                new_file.write(new_line)
-
-                # Write the contents of the original file to the new file
-                new_file.write(original_file.read())
+                for line in original_file:
+                    if line.startswith("#include"):
+                        found_include = True
+                    elif found_include and not line.startswith("#include") and not inserted:
+                        new_file.write(new_line)
+                        inserted = True
+                    new_file.write(line)
 
             os.rename(new_file_path, original_file_path)
 
