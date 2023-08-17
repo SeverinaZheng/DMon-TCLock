@@ -1,4 +1,5 @@
 import os
+import sys
 import shutil
 import subprocess
 import re
@@ -378,9 +379,15 @@ def rewrite(line, is_name,target_instruction,lock_unlock):
 
 
 if __name__ == "__main__":
+
+    if len(sys.argv) < 2:
+        print("Usage: python adapt_to_bpf.py <function_name>")
+        sys.exit(1)
+
+    input_function_name = sys.argv[1]
     template_path = "/home/syncord/SynCord-linux-template"
     destination_path = "/home/syncord/SynCord-linux-destination"
-    my_bpf_path = "include/linux/my_bpf_spin_lock.h"
+    my_bpf_path = "include/linux/my_bpf_{input_function_name}.h"
 
 
     if os.path.exists(destination_path):
@@ -390,8 +397,8 @@ if __name__ == "__main__":
 
     create_bpf_header(destination_path,my_bpf_path)
 
-    find_call_stack("spin_lock",template_path, "spin_lock")
-    write_to_bpf_header(template_path, destination_path,my_bpf_path,"spin_lock")
+    find_call_stack(input_function_name,template_path, input_function_name)
+    write_to_bpf_header(template_path, destination_path,my_bpf_path,input_function_name)
     valid_call_tree = []
 
     find_call_stack("spin_unlock",template_path, "spin_unlock")
