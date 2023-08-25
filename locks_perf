@@ -1,4 +1,4 @@
-Fxmark:
+Fxmark locks by filtering with cache miss:
 DWAL: ksys_write,shmem_write_begin,queued_spin_lock_slowpath(6.25%)
 DWOL: new_sync_write,queued_spin_lock_slowpath(1.82%)
 DWOM: ksys_pwrite64, new_sync_writ,rwsem_down_write_slowpath(32.39%)
@@ -21,8 +21,11 @@ MRPH: path_openat, shmem_mknod,queued_spin_lock(1.86%)
       path_openat, d_alloc,queued_spin_lock(0.22%)
       __do_sys_newstat,path_put, queued_spin_lock_slowpath(1.21%)
       __do_sys_newstat,path_lookupat, queued_spin_lock_slowpath(1.43%)
-MRDM:
-MRDL:
-DRBH:
-DRBM:
-DRBL:
+MRDM: __x64_sys_getdents, scan_positives, queued_spin_lock_slowpath(17.79%)
+      path_openat,rwsem_down_write_slowpath(14.72%)
+MRDL: path_openat, shmem_mknod,queued_spin_lock_slowpath(18.55%)
+      path_openat, d_alloc,queued_spin_lock(0.90%)
+      path_openat, d_add,queued_spin_lock(1.36%)
+DRBH: ksys_pread64,shmem_file_read_iter,queued_spin_lock_slowpath(9.66%)
+DRBM: N/A
+DRBL: N/A
