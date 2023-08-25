@@ -1,0 +1,28 @@
+Fxmark:
+DWAL: ksys_write,shmem_write_begin,queued_spin_lock_slowpath(6.25%)
+DWOL: new_sync_write,queued_spin_lock_slowpath(1.82%)
+DWOM: ksys_pwrite64, new_sync_writ,rwsem_down_write_slowpath(32.39%)
+DWSL: N/A
+MWRL: __x64_sys_rename,d_move,queued_spin_lock_slowpath(51.61%)
+      __x64_sys_rename,d_allocate/d_lookup,queued_spin_lock(0.81%,0.81%)
+MWCL: path_openat, d_alloc,queued_spin_lock_slowpath(0.53%)
+      path_openat, shmem_mknod,queued_spin_lock_slowpath(23.94%)
+MWCM:
+MWUM:
+MWUL:
+DWTL:
+
+filebench_varmail:
+filebench_oltp,
+filebench_fileserver:
+
+dbench_client:
+
+MRPL:
+MRPM:
+MRPH:
+MRDM:
+MRDL:
+DRBH:
+DRBM:
+DRBL:
