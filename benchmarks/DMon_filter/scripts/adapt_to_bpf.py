@@ -7,6 +7,7 @@ import re
 target_bpf_functions = ['queued_spin_lock_slowpath','queued_spin_lock','queued_spin_unlock_slowpath','queued_spin_unlock']
 valid_call_tree = []
 functions_added = []
+function_header_added = []
 
 
 def find_function_content(file_path, function_name,line_number):
@@ -43,9 +44,18 @@ def find_function_content(file_path, function_name,line_number):
                         return output_list
 
                     # for something like void ... acquire(lock);
+                    # and void ...
+                    #         __acquire(lock);
                     if line.endswith(";"):
                         return None
+                    if line.endswith(")") and lines[int(line_number)].strip() == "__acquires(lock);":
+                        return None
+                    if line.endswith(")") and lines[int(line_number)].strip() == "__releases(lock);":
+                        return None
 
+                     # for something like #define ... __LOCK_IRQSAVE, which will go to acquire
+                    if "__LOCK_" in line:
+                        return None
 
                     if line.startswith("#define") and (not line.endswith("\\")):
                         start_index = i
@@ -57,17 +67,17 @@ def find_function_content(file_path, function_name,line_number):
                         start_index = i+2
                         # print(f"{start_index}")
                         # print(f"{line}")
-                if line.startswith(end_marker) and start_marker is not None and end_index is None:
+                if (line.startswith(end_marker) or line.strip().startswith("} while")) and start_marker is not None and end_index is None:
                     end_index = i
                     #print(f"{end_index}")
                     break
             if start_index is not None and end_index is not None:
                 if is_mapping:
                     parts = lines[start_index].split()
-                    if len(parts) == 3:
-                        defpart,key,mapping = parts
-                        #print(f"mapping")
-                        return [mapping]
+                    if len(parts) >= 3:
+                        # defpart,key,mapping = parts
+                        # print(f"mapping")
+                        return [parts[len(parts)-1]]
                 lines_between_markers = lines[start_index:end_index]
                 return lines_between_markers
             else:
@@ -126,7 +136,6 @@ def execute_global_command(function_name,target_directory):
         process2.stdout.close()
         process1.stdout.close()
         output = process4.communicate()[0].decode('utf-8')
-
         return output
     except subprocess.CalledProcessError as e:
         print(f"Error executing the command: {e}")
@@ -137,6 +146,7 @@ def find_call_stack(function_name,source_path,lock_unlock):
     try:
         function_info = execute_global_command(function_name,source_path).strip()
         parts = function_info.split()
+        # print(f"{function_name}")
         # print(f"source files :{parts}")
         if len(parts) % 2 != 0:
             print("The list must be even length")
@@ -154,12 +164,30 @@ def find_call_stack(function_name,source_path,lock_unlock):
                 # print(f"content: {content}")
                 callee = None
                 found = False
+                altered = ""
                 for j,instruction in enumerate(content):
                     instruction = instruction.strip()
                     # print(f"instruction : {instruction}")
+                    # get rid of comments
+                    if(instruction.startswith("*")):
+                        continue
+                    # get rid of "return" 
+                    if(instruction.startswith("return ")):
+                        instruction = instruction[7:]
+                        altered = "return "
+                    # get rid of "}while...."
+                    if("} while" in instruction):
+                        print("while")
+                        continue
+
                     index_of_parentheses = instruction.find("(")
+                    index_of_assign = instruction.find("=")
                     if index_of_parentheses != -1:
-                        callee = instruction[:index_of_parentheses].strip()
+                        if index_of_assign > 0:
+                            callee = instruction[index_of_assign+1:index_of_parentheses].strip()
+                            altered = instruction[:index_of_assign+1]
+                        else:
+                            callee = instruction[:index_of_parentheses].strip()
                         if callee in target_bpf_functions:
                             # print (f"End of Stack: Found:{function_name},{j}")
                             add_valid_function(function_path_part, line_number,j,instruction)
@@ -176,8 +204,8 @@ def find_call_stack(function_name,source_path,lock_unlock):
                                 parameters = instruction[start + 1:end].split(",")
                                 callee_instruction = find_call_stack_with_arguments(callee, source_path,parameters,lock_unlock)
                                 if callee_instruction is not None:
-                                    parts = callee_instruction.split(",")
-                                    callee = parts[0]
+                                    para_index = callee_instruction.find("(")
+                                    callee = callee_instruction[:para_index]
                                     if find_call_stack(callee, source_path,lock_unlock):
                                         # print(f"valid caller{callee},{function_name}, {function_path},{line_number},{j}")
                                         add_valid_function(function_path_part, line_number,j,callee_instruction)
@@ -198,10 +226,19 @@ def find_call_stack(function_name,source_path,lock_unlock):
 
 def add_valid_function(function_path,line_number, offset,instruction):
     function_info = function_path +","+ str(line_number) + "," + str(offset) + "," + instruction
-    instruction = instruction.strip(";")
-    if instruction not in functions_added and function_info not in valid_call_tree:
-        valid_call_tree.append(function_info)
-        functions_added.append(instruction)
+
+    target_index = -1
+    found = False
+    if instruction.strip(";") not in functions_added:
+        for index,tup in enumerate(valid_call_tree):
+            if(function_path,str(line_number)) == tup[0]:
+                target_index=index
+                found = True
+                valid_call_tree[target_index] = (tup[0],tup[1],(str(offset),instruction) )
+                break
+        if not found:
+            valid_call_tree.append(( (function_path,str(line_number)),(str(offset),instruction) ))
+        functions_added.append(instruction.strip(";"))
 
 
 
@@ -225,6 +262,8 @@ def find_call_stack_with_arguments(function_name,source_path, parameters,lock_un
                 # print(f"content: {content}")
                 # print(f"arguments : {arguments}")
                 callee = None
+                if content is None:
+                    return None
                 for instruction in content:
                     instruction = instruction.strip()
                     index_of_parentheses = instruction.find("(")
@@ -245,7 +284,7 @@ def find_call_stack_with_arguments(function_name,source_path, parameters,lock_un
                                  if param in arguments:
                                     which_param = arguments.index(param)
                                     para_param = parameters[which_param]
-                                    paraphrase_arguments = paraphrase_arguments + ","+para_param
+                                    paraphrase_arguments = paraphrase_arguments + "("+para_param+")"
                             callee = callee + paraphrase_arguments
                             return callee 
 
@@ -272,12 +311,15 @@ def end_bpf_header(destination_path,my_bpf_path):
 
 
 def write_to_bpf_header(template_path, destination_path,my_bpf_path,lock_unlock):
+    print(valid_call_tree)
     for function_info in valid_call_tree:
-        parts = function_info.split(',',3)
-        function_path = parts[0]
-        line_number = parts[1]
-        offset = parts[2]
-        instruction = parts[3].strip()
+        #parts = function_info.split(',')
+        function_path = function_info[0][0]
+        line_number = function_info[0][1]
+        instruction_list = function_info[1:]
+        #instruction_list = sorted(instruction_list, key=lambda x: x[0])
+        #offset = parts[2]
+        #instruction = parts[3].strip()
 
         source_function_path = template_path +"/" + function_path
         destination_function_path = destination_path + "/" + my_bpf_path
@@ -290,22 +332,35 @@ def write_to_bpf_header(template_path, destination_path,my_bpf_path,lock_unlock)
             reach_function = False
             with open(destination_function_path, 'a') as destination_file:
                 for i, line in enumerate(lines):
-                    if i == int(line_number)-1:
-                        if line.startswith("#define") and (not line.endswith("\\")):
-                            line = rewrite(line,False,instruction,lock_unlock)
-                            print(f"{line}")
-                            destination_file.write(line)
-                            destination_file.write("\n")
-                            break
-                        line = rewrite(line,True,instruction,lock_unlock)
-                        reach_function = True
-                    if i == int(line_number) + int(offset) + 1:
-                        line = rewrite(line,False,instruction,lock_unlock)
+                    altered_name = False
+                    for instruction_info in instruction_list:
+                        offset = instruction_info[0]
+                        instruction = instruction_info[1].strip()
+
+                        if i == int(line_number)-1 and not altered_name:
+                            if line.startswith("#define") and (not line.endswith("\\")):
+                                line = rewrite(line,False,instruction,lock_unlock)
+                                if(line is None):
+                                    break
+                                print(f"{line}")
+                                destination_file.write(line)
+                                destination_file.write("\n")
+                                break
+                            line = rewrite(line,True,instruction,lock_unlock)
+                            if(line is None):
+                                break
+                            reach_function = True
+                            altered_name = True
+
+                        if i == int(line_number) + int(instruction_info[0]) + 1:
+                            line = rewrite(line,False,instruction_info[1],lock_unlock)
                     if reach_function:
                         print(f"{line}")
                         destination_file.write(line)
                         destination_file.write("\n")
                     if line == "}":
+                        reach_function = False
+                    if line is not None and line.strip().startswith("} while"):
                         reach_function = False
 
                             
@@ -318,6 +373,12 @@ def rewrite(line, is_name,target_instruction,lock_unlock):
         args = target_instruction[1]
     else:
         function_name = target_instruction
+        left_para_index = function_name.find("(")
+        right_para_index = function_name.rfind(")")
+        if left_para_index > 0 and right_para_index > 0:
+            args =  function_name[left_para_index+1:right_para_index]
+            function_name = function_name[:left_para_index]
+
     modified = ""
     # rewrite function name
     if is_name:
@@ -331,23 +392,44 @@ def rewrite(line, is_name,target_instruction,lock_unlock):
         for part in parts:
             pattern = rf'^{re.escape(lock_unlock)}'
             if re.match(pattern,part) is not None:
-                part = "my_bpf_" + part
+                if(part.strip("(") in function_header_added):
+                    return None
+                else:
+                    function_header_added.append(part.strip("("))
+                    part = "my_bpf_" + part
             elif lock_unlock in part:
-                part = "bpf_" + part
+                if(part.strip("(") in function_header_added):
+                    return None
+                else:
+                    function_header_added.append(part.strip("("))
+                    part = "bpf_" + part
             modified = modified + part + " "
         modified = modified.strip()
-        modified = modified + arguments + ", int policy" + other_info
+        if line.startswith("#define"):
+            modified = modified + arguments + ", policy" + other_info
+        else:
+            modified = modified + arguments + ", int policy" + other_info
 
     
     # for situation: #define xxx aaa
     elif line.startswith("#define"):
         modified = ""
-        parts = line.split()
+        parts = ["#define"]
+        remaining_parts = re.split(r'\)', line[8:])
+        remaining_parts = [substring.strip() + ')' for substring in remaining_parts if substring]
+        parts = parts + remaining_parts
+                
         for i,part in enumerate(parts):
+            first_left_brac = part.find("(")
             first_right_brac = part.find(")")
             if first_right_brac > 0:
                 dec_and_arg= part[:first_right_brac]
                 remaining =  part[first_right_brac:]
+                if i == 1 :
+                    if(part[:first_left_brac].strip("(") in function_header_added):
+                        return None
+                    else:
+                        function_header_added.append(part[:first_left_brac].strip("("))
                 modified = modified + "bpf_" + dec_and_arg + ",policy" + remaining + " "
             else:
                 modified = modified + part + " "
@@ -360,13 +442,26 @@ def rewrite(line, is_name,target_instruction,lock_unlock):
                 break
         line = line.strip()
         # for situation: function passed as arguments
-        if line != function_name:
-            modified = leading_space + "bpf_"+function_name + "("+args + ",policy);"
+        left_brac_index = line.find("(")
+        if line[:left_brac_index] != function_name:
+            #print("====")
+            #print(line)
+            #print(function_name)
+            #print(args)
+            #print("===")
+            first_right_brac = line.find(";")
+            remaining =  line[first_right_brac+1:]
+            modified = leading_space + "bpf_"+function_name.strip() + "("+args + ",policy);" + remaining
         else:
-            first_right_brac = line.find(")")
-            dec_and_arg= line[:first_right_brac]
-            remaining =  line[first_right_brac:]
-            modified = leading_space + re.match(r"\s*", line).group() + "bpf_" + dec_and_arg + ",policy" + remaining
+            equal_index =line.find("=")
+            before_equal = ""
+            if equal_index > 0:
+                 before_equal =line[:equal_index+1]
+                 line = line[equal_index+2:]
+            last_right_brac = line.rfind(")")
+            dec_and_arg= line[:last_right_brac]
+            remaining =  line[last_right_brac:]
+            modified = leading_space + re.match(r"\s*", line).group() + before_equal + "bpf_" + dec_and_arg + ",policy" + remaining
 
     return modified
 
@@ -378,31 +473,35 @@ def rewrite(line, is_name,target_instruction,lock_unlock):
 
 
 
-if __name__ == "__main__":
 
-    if len(sys.argv) < 2:
-        print("Usage: python adapt_to_bpf.py <function_name>")
-        sys.exit(1)
-
-    input_function_name = sys.argv[1]
+def run_all(input_function_name,corresponding_unlock):
     template_path = "/home/syncord/SynCord-linux-template"
     destination_path = "/home/syncord/SynCord-linux-destination"
-    my_bpf_path = "include/linux/my_bpf_{input_function_name}.h"
+    my_bpf_path = f"include/linux/my_bpf_spin_lock.h"
 
 
-    if os.path.exists(destination_path):
-        shutil.rmtree(destination_path)
-        print("destination already exists")
-    shutil.copytree(template_path, destination_path)
-
-    create_bpf_header(destination_path,my_bpf_path)
-
-    find_call_stack(input_function_name,template_path, input_function_name)
-    write_to_bpf_header(template_path, destination_path,my_bpf_path,input_function_name)
+    find_call_stack(input_function_name,template_path, "spin_lock")
+    write_to_bpf_header(template_path, destination_path,my_bpf_path,"spin_lock")
     valid_call_tree = []
 
-    find_call_stack("spin_unlock",template_path, "spin_unlock")
+
+    find_call_stack(corresponding_unlock,template_path, "spin_unlock")
     write_to_bpf_header(template_path, destination_path,my_bpf_path,"spin_unlock")
+    print(function_header_added)
     valid_call_tree = []
+    
 
-    end_bpf_header(destination_path,my_bpf_path)
+
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        print("Usage: python adapt_to_bpf.py <lock_unlock_funcs>")
+        sys.exit(1)
+    lock_unlock_pairs_string = sys.argv[1]
+    lock_unlock_pairs =lock_unlock_pairs_string.split(",")
+    if len(lock_unlock_pairs) % 2 != 0:
+        print("The list must be even length")
+    else:
+        for i in range(0,len(lock_unlock_pairs)-1,2):
+            lock_name = lock_unlock_pairs[i]
+            unlock_name = lock_unlock_pairs[i+1]
+            run_all(lock_name,unlock_name)

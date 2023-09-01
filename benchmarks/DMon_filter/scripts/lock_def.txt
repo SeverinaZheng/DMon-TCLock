@@ -1,0 +1,40 @@
+
+spin_unlock_irqrestore(&pgdat->lru_lock, flags);
+spin_lock_irqsave(&pgdat->lru_lock, flags);
+spin_unlock_irqrestore(&pgdat->lru_lock, flags);
+spin_unlock_irqrestore(&locked_pgdat->lru_lock, flags);
+spin_unlock_irqrestore(&locked_pgdat->lru_lock,
+spin_unlock_irqrestore(&locked_pgdat->lru_lock, flags);
+spin_unlock_irqrestore(&locked_pgdat->lru_lock,
+spin_lock_irqsave(&locked_pgdat->lru_lock, flags);
+spin_unlock_irqrestore(&locked_pgdat->lru_lock, flags);
+inode_lock(inode);
+inode_lock
+inode_lock(inode);
+spin_lock(&inode->i_lock);
+spin_lock
+spin_lock(&inode->i_lock);
+spin_unlock(&inode->i_lock);
+spin_unlock
+		spin_lock(&inode->i_lock); 
+spin_lock(&inode->i_lock);
+spin_lock
+spin_lock(&inode->i_lock);
+spin_unlock(&inode->i_lock);
+spin_unlock
+		spin_lock(&inode->i_lock); 
+spin_lock(&inode->i_lock);
+spin_lock
+spin_lock(&inode->i_lock);
+spin_unlock(&inode->i_lock);
+spin_unlock
+	spin_lock(&inode->i_lock); 
+spin_lock(&inode->i_lock);
+spin_lock
+spin_lock(&inode->i_lock);
+spin_unlock(&inode->i_lock);
+spin_unlock
+	spin_lock(&inode->i_lock); 
+inode_unlock(inode);
+inode_unlock
+	inode_lock(inode); 

@@ -1,11 +1,13 @@
 import os
+import sys
 import shutil
 import subprocess
 
 source_directory = "/home/syncord/SynCord-linux-base"
 destination_directory = "/home/syncord/SynCord-linux-template"
 DMON_dir = "/home/syncord/DMon-TCLock/benchmarks/DMon_filter/"
-which_lock = "lock1"
+which_lock = ""
+structure = ""
 
 
 def copy_directory(source, destination):
@@ -17,10 +19,10 @@ def copy_directory(source, destination):
 
 def apply_coccinelle(file_path,file_name):
     try:
-        cocci_path = DMON_dir + "scripts/find_spin_lock.cocci"
+        cocci_path = DMON_dir + f"scripts/cocci_scripts/{lock_type}_{structure}.cocci"
         command = f"spatch --sp-file {cocci_path} {file_name} -o {file_name}"
         subprocess.Popen(command, stdout=subprocess.PIPE, shell=True, cwd=file_path)
-        grep = f"grep -n 'spin_unlock([^)]*->file_lock)' {file_name}"
+        grep = f"grep -n '{unlock_type}([^)]*->{structure})' {file_name}"
         p1 = subprocess.Popen(grep, stdout=subprocess.PIPE,shell=True, cwd=file_path)
         output,_ = p1.communicate()
         if output != b"":
@@ -57,11 +59,20 @@ def apply_template_patch():
 
 
 if __name__ == "__main__":
+    if len(sys.argv) < 5:
+        print("Usage: python adapt_to_bpf.py <lock_type> <structure> <unlock> <apply_spin_lock>")
+        sys.exit(1)
 
-    if os.path.exists(destination_directory):
-        shutil.rmtree(destination_directory)
-    copy_directory(source_directory, destination_directory)
-    apply_template_patch()
+    lock_type = sys.argv[1]
+    structure = sys.argv[2]
+    unlock_type = sys.argv[3]
+    new_lock = sys.argv[4]
+    which_lock = "spin_lock"
+
+    if new_lock == "0" :
+        apply_template_patch()
+        print(f"apply patch to {which_lock}")
+    print(f"apply patch to {lock_type}")
 
     for root, dirs, files in os.walk(destination_directory):
         for file in files:
