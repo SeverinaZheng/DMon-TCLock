@@ -22,10 +22,11 @@ def apply_coccinelle(file_path,file_name):
         cocci_path = DMON_dir + f"scripts/cocci_scripts/{lock_type}_{structure}.cocci"
         command = f"spatch --sp-file {cocci_path} {file_name} -o {file_name}"
         subprocess.Popen(command, stdout=subprocess.PIPE, shell=True, cwd=file_path)
-        grep = f"grep -n '{unlock_type}([^)]*->{structure})' {file_name}"
+        grep = f"grep -n '{unlock_type}([^)]*->{structure}.*)' {file_name}"
         p1 = subprocess.Popen(grep, stdout=subprocess.PIPE,shell=True, cwd=file_path)
         output,_ = p1.communicate()
         if output != b"":
+            print(output)
             # Open the original file and the new file
             original_file_path = file_path + "/" + file_name
             new_file_path = file_path + "/new_file.c"

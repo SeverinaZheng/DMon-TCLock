@@ -126,6 +126,7 @@ if __name__ == "__main__":
             already_apply_patch.append((lock_type,unlock_type))
         change_func_calling_lock_command = f"python3 apply_coccinelle.py {lock_type} {lock_structure} {unlock_type} {apply_spin_lock} 2>/dev/null"
         apply_spin_lock = 1
+        print(change_func_calling_lock_command)
         process3 = subprocess.Popen(change_func_calling_lock_command,stdout=subprocess.PIPE,shell=True)
         output = process3.communicate()[0].decode('utf-8')
         print(output)

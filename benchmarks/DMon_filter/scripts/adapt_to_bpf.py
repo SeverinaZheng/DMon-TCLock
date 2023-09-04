@@ -6,6 +6,7 @@ import re
 
 target_bpf_functions = ['queued_spin_lock_slowpath','queued_spin_lock','queued_spin_unlock_slowpath','queued_spin_unlock']
 valid_call_tree = []
+instructions_added = []
 functions_added = []
 function_header_added = []
 
@@ -119,6 +120,33 @@ def find_function_arguments(file_path, function_name,line_number):
         print(f"An error occurred: {e}")
 
 
+def find_function_signature(file_path, function_name,line_number):
+    try:
+        with open(file_path, 'r') as file:
+            content = file.read()
+            lines = content.splitlines()
+            start_marker = None
+            end_marker = "}"
+
+            start_index = None
+            end_index = None
+            is_mapping = False
+
+            for i, line in enumerate(lines):
+                if i == int(line_number)-1:
+                    start = line.find("(")
+                    end = line.rfind(")")
+
+                    if start == -1 or end == -1:
+                        return None
+
+                    parameters = line[start + 1:end].split(",")
+                    return line
+
+    except FileNotFoundError:
+        print(f"Error: The file '{file_path}' could not be found.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
 
 def execute_global_command(function_name,target_directory):
     try:
@@ -159,6 +187,7 @@ def find_call_stack(function_name,source_path,lock_unlock):
                 # print(f"find {line_number}")
                 content = find_function_content(function_path,function_name,line_number)
                 arguments = find_function_arguments(function_path,function_name,line_number)
+                signature = find_function_signature(function_path,function_name,line_number)
                 if (content is None):
                     continue
                 # print(f"content: {content}")
@@ -190,7 +219,7 @@ def find_call_stack(function_name,source_path,lock_unlock):
                             callee = instruction[:index_of_parentheses].strip()
                         if callee in target_bpf_functions:
                             # print (f"End of Stack: Found:{function_name},{j}")
-                            add_valid_function(function_path_part, line_number,j,instruction)
+                            add_valid_function(signature,function_path_part, line_number,j,instruction)
                             return True
                         if callee.find(lock_unlock) == -1:
                             # in case that it does not call directly but passing to it as argument
@@ -208,14 +237,14 @@ def find_call_stack(function_name,source_path,lock_unlock):
                                     callee = callee_instruction[:para_index]
                                     if find_call_stack(callee, source_path,lock_unlock):
                                         # print(f"valid caller{callee},{function_name}, {function_path},{line_number},{j}")
-                                        add_valid_function(function_path_part, line_number,j,callee_instruction)
+                                        add_valid_function(signature,function_path_part, line_number,j,callee_instruction)
                                         found = True
 
 
                         else:
                             if find_call_stack(callee, source_path,lock_unlock):
                                 # print(f"valid caller{callee},{function_name}, {function_path},{line_number},{j}")
-                                add_valid_function(function_path_part, line_number,j,instruction)
+                                add_valid_function(signature,function_path_part, line_number,j,instruction)
                                 found = True
             return found
 
@@ -224,21 +253,23 @@ def find_call_stack(function_name,source_path,lock_unlock):
     except Exception as e:
         print(f"An error occurred: {e}")
 
-def add_valid_function(function_path,line_number, offset,instruction):
+def add_valid_function(signature,function_path,line_number, offset,instruction):
     function_info = function_path +","+ str(line_number) + "," + str(offset) + "," + instruction
 
     target_index = -1
     found = False
-    if instruction.strip(";") not in functions_added:
+    if signature not in functions_added or instruction.strip(";") not in instructions_added:
         for index,tup in enumerate(valid_call_tree):
             if(function_path,str(line_number)) == tup[0]:
                 target_index=index
                 found = True
-                valid_call_tree[target_index] = (tup[0],tup[1],(str(offset),instruction) )
+                valid_call_tree.pop(target_index)
+                valid_call_tree.append((tup[0],tup[1],(str(offset),instruction) ))
                 break
         if not found:
             valid_call_tree.append(( (function_path,str(line_number)),(str(offset),instruction) ))
-        functions_added.append(instruction.strip(";"))
+        functions_added.append(signature)
+        instructions_added.append(instruction.strip(";"))
 
 
 
@@ -313,7 +344,6 @@ def end_bpf_header(destination_path,my_bpf_path):
 def write_to_bpf_header(template_path, destination_path,my_bpf_path,lock_unlock):
     print(valid_call_tree)
     for function_info in valid_call_tree:
-        #parts = function_info.split(',')
         function_path = function_info[0][0]
         line_number = function_info[0][1]
         instruction_list = function_info[1:]
@@ -352,7 +382,7 @@ def write_to_bpf_header(template_path, destination_path,my_bpf_path,lock_unlock)
                             reach_function = True
                             altered_name = True
 
-                        if i == int(line_number) + int(instruction_info[0]) + 1:
+                        if reach_function and i == int(line_number) + int(instruction_info[0]) + 1:
                             line = rewrite(line,False,instruction_info[1],lock_unlock)
                     if reach_function:
                         print(f"{line}")
@@ -427,6 +457,8 @@ def rewrite(line, is_name,target_instruction,lock_unlock):
                 remaining =  part[first_right_brac:]
                 if i == 1 :
                     if(part[:first_left_brac].strip("(") in function_header_added):
+                        print(part[:first_left_brac])
+                        print(function_header_added)
                         return None
                     else:
                         function_header_added.append(part[:first_left_brac].strip("("))
@@ -482,6 +514,7 @@ def run_all(input_function_name,corresponding_unlock):
 
     find_call_stack(input_function_name,template_path, "spin_lock")
     write_to_bpf_header(template_path, destination_path,my_bpf_path,"spin_lock")
+    global valid_call_tree 
     valid_call_tree = []
 
 
