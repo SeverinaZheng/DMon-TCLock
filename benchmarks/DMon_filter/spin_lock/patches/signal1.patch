@@ -1,0 +1,1285 @@
+diff -ruN SynCord-linux-base/arch/ia64/kernel/ptrace.c SynCord-linux-destination/arch/ia64/kernel/ptrace.c
+--- SynCord-linux-base/arch/ia64/kernel/ptrace.c	2023-09-07 12:03:12.748141525 +0000
++++ SynCord-linux-destination/arch/ia64/kernel/ptrace.c	2023-09-07 12:06:44.156427810 +0000
+@@ -24,6 +24,7 @@
+ #include <linux/regset.h>
+ #include <linux/elf.h>
+ #include <linux/tracehook.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <asm/pgtable.h>
+ #include <asm/processor.h>
+@@ -644,7 +645,8 @@
+ 
+ 	read_lock(&tasklist_lock);
+ 	if (child->sighand) {
+-		spin_lock_irq(&child->sighand->siglock);
++		extern int num_policy;
++		my_bpf_spin_lock_irq(&child->sighand->siglock, num_policy);
+ 		if (child->state == TASK_STOPPED &&
+ 		    !test_and_set_tsk_thread_flag(child, TIF_RESTORE_RSE)) {
+ 			set_notify_resume(child);
+@@ -652,7 +654,7 @@
+ 			child->state = TASK_TRACED;
+ 			stopped = 1;
+ 		}
+-		spin_unlock_irq(&child->sighand->siglock);
++		my_bpf_spin_unlock_irq(&child->sighand->siglock, num_policy);
+ 	}
+ 	read_unlock(&tasklist_lock);
+ 
+@@ -668,12 +670,13 @@
+ 	 */
+ 	read_lock(&tasklist_lock);
+ 	if (child->sighand) {
+-		spin_lock_irq(&child->sighand->siglock);
++		extern int num_policy;
++		my_bpf_spin_lock_irq(&child->sighand->siglock, num_policy);
+ 		if (child->state == TASK_TRACED &&
+ 		    (child->signal->flags & SIGNAL_STOP_STOPPED)) {
+ 			child->state = TASK_STOPPED;
+ 		}
+-		spin_unlock_irq(&child->sighand->siglock);
++		my_bpf_spin_unlock_irq(&child->sighand->siglock, num_policy);
+ 	}
+ 	read_unlock(&tasklist_lock);
+ }
+diff -ruN SynCord-linux-base/drivers/tty/tty_jobctrl.c SynCord-linux-destination/drivers/tty/tty_jobctrl.c
+--- SynCord-linux-base/drivers/tty/tty_jobctrl.c	2023-09-07 12:03:12.748141525 +0000
++++ SynCord-linux-destination/drivers/tty/tty_jobctrl.c	2023-09-07 12:06:11.460348037 +0000
+@@ -11,6 +11,7 @@
+ #include <linux/tty.h>
+ #include <linux/fcntl.h>
+ #include <linux/uaccess.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ static int is_ignored(int sig)
+ {
+@@ -117,9 +118,10 @@
+ 
+ static void proc_set_tty(struct tty_struct *tty)
+ {
+-	spin_lock_irq(&current->sighand->siglock);
++	extern int num_policy;
++	my_bpf_spin_lock_irq(&current->sighand->siglock, num_policy);
+ 	__proc_set_tty(tty);
+-	spin_unlock_irq(&current->sighand->siglock);
++	my_bpf_spin_unlock_irq(&current->sighand->siglock, num_policy);
+ }
+ 
+ /*
+@@ -127,8 +129,9 @@
+  */
+ void tty_open_proc_set_tty(struct file *filp, struct tty_struct *tty)
+ {
++	extern int num_policy;
+ 	read_lock(&tasklist_lock);
+-	spin_lock_irq(&current->sighand->siglock);
++	my_bpf_spin_lock_irq(&current->sighand->siglock, num_policy);
+ 	if (current->signal->leader &&
+ 	    !current->signal->tty &&
+ 	    tty->session == NULL) {
+@@ -149,7 +152,7 @@
+ 		if (filp->f_mode & FMODE_READ)
+ 			__proc_set_tty(tty);
+ 	}
+-	spin_unlock_irq(&current->sighand->siglock);
++	my_bpf_spin_unlock_irq(&current->sighand->siglock, num_policy);
+ 	read_unlock(&tasklist_lock);
+ }
+ 
+@@ -197,7 +200,8 @@
+ 	read_lock(&tasklist_lock);
+ 	if (tty->session) {
+ 		do_each_pid_task(tty->session, PIDTYPE_SID, p) {
+-			spin_lock_irq(&p->sighand->siglock);
++			extern int num_policy;
++			my_bpf_spin_lock_irq(&p->sighand->siglock, num_policy);
+ 			if (p->signal->tty == tty) {
+ 				p->signal->tty = NULL;
+ 				/* We defer the dereferences outside fo
+@@ -205,7 +209,8 @@
+ 				refs++;
+ 			}
+ 			if (!p->signal->leader) {
+-				spin_unlock_irq(&p->sighand->siglock);
++				my_bpf_spin_unlock_irq(&p->sighand->siglock,
++						       num_policy);
+ 				continue;
+ 			}
+ 			__group_send_sig_info(SIGHUP, SEND_SIG_PRIV, p);
+@@ -216,7 +221,8 @@
+ 			if (tty->pgrp)
+ 				p->signal->tty_old_pgrp = get_pid(tty->pgrp);
+ 			spin_unlock(&tty->ctrl_lock);
+-			spin_unlock_irq(&p->sighand->siglock);
++			my_bpf_spin_unlock_irq(&p->sighand->siglock,
++					       num_policy);
+ 		} while_each_pid_task(tty->session, PIDTYPE_SID, p);
+ 	}
+ 	read_unlock(&tasklist_lock);
+@@ -256,6 +262,7 @@
+  */
+ void disassociate_ctty(int on_exit)
+ {
++	extern int num_policy;
+ 	struct tty_struct *tty;
+ 
+ 	if (!current->signal->leader)
+@@ -277,11 +284,12 @@
+ 		tty_kref_put(tty);
+ 
+ 	} else if (on_exit) {
++		extern int num_policy;
+ 		struct pid *old_pgrp;
+-		spin_lock_irq(&current->sighand->siglock);
++		my_bpf_spin_lock_irq(&current->sighand->siglock, num_policy);
+ 		old_pgrp = current->signal->tty_old_pgrp;
+ 		current->signal->tty_old_pgrp = NULL;
+-		spin_unlock_irq(&current->sighand->siglock);
++		my_bpf_spin_unlock_irq(&current->sighand->siglock, num_policy);
+ 		if (old_pgrp) {
+ 			kill_pgrp(old_pgrp, SIGHUP, on_exit);
+ 			kill_pgrp(old_pgrp, SIGCONT, on_exit);
+@@ -290,7 +298,7 @@
+ 		return;
+ 	}
+ 
+-	spin_lock_irq(&current->sighand->siglock);
++	my_bpf_spin_lock_irq(&current->sighand->siglock, num_policy);
+ 	put_pid(current->signal->tty_old_pgrp);
+ 	current->signal->tty_old_pgrp = NULL;
+ 
+@@ -306,7 +314,7 @@
+ 		tty_kref_put(tty);
+ 	}
+ 
+-	spin_unlock_irq(&current->sighand->siglock);
++	my_bpf_spin_unlock_irq(&current->sighand->siglock, num_policy);
+ 	/* Now clear signal->tty under the lock */
+ 	read_lock(&tasklist_lock);
+ 	session_clear_tty(task_session(current));
+diff -ruN SynCord-linux-base/fs/coda/upcall.c SynCord-linux-destination/fs/coda/upcall.c
+--- SynCord-linux-base/fs/coda/upcall.c	2023-09-07 12:03:12.748141525 +0000
++++ SynCord-linux-destination/fs/coda/upcall.c	2023-09-07 12:06:29.348390269 +0000
+@@ -31,6 +31,7 @@
+ #include <linux/uaccess.h>
+ #include <linux/vmalloc.h>
+ #include <linux/vfs.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <linux/coda.h>
+ #include "coda_psdev.h"
+@@ -615,7 +616,8 @@
+  */
+ static void coda_block_signals(sigset_t *old)
+ {
+-	spin_lock_irq(&current->sighand->siglock);
++	extern int num_policy;
++	my_bpf_spin_lock_irq(&current->sighand->siglock, num_policy);
+ 	*old = current->blocked;
+ 
+ 	sigfillset(&current->blocked);
+@@ -624,15 +626,16 @@
+ 	sigdelset(&current->blocked, SIGINT);
+ 
+ 	recalc_sigpending();
+-	spin_unlock_irq(&current->sighand->siglock);
++	my_bpf_spin_unlock_irq(&current->sighand->siglock, num_policy);
+ }
+ 
+ static void coda_unblock_signals(sigset_t *old)
+ {
+-	spin_lock_irq(&current->sighand->siglock);
++	extern int num_policy;
++	my_bpf_spin_lock_irq(&current->sighand->siglock, num_policy);
+ 	current->blocked = *old;
+ 	recalc_sigpending();
+-	spin_unlock_irq(&current->sighand->siglock);
++	my_bpf_spin_unlock_irq(&current->sighand->siglock, num_policy);
+ }
+ 
+ /* Don't allow signals to interrupt the following upcalls before venus
+diff -ruN SynCord-linux-base/fs/coredump.c SynCord-linux-destination/fs/coredump.c
+--- SynCord-linux-base/fs/coredump.c	2023-09-07 12:03:12.752141525 +0000
++++ SynCord-linux-destination/fs/coredump.c	2023-09-07 12:06:26.220382633 +0000
+@@ -41,6 +41,7 @@
+ #include <linux/fs.h>
+ #include <linux/path.h>
+ #include <linux/timekeeping.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <linux/uaccess.h>
+ #include <asm/mmu_context.h>
+@@ -360,18 +361,19 @@
+ static int zap_threads(struct task_struct *tsk, struct mm_struct *mm,
+ 			struct core_state *core_state, int exit_code)
+ {
++	extern int num_policy;
+ 	struct task_struct *g, *p;
+ 	unsigned long flags;
+ 	int nr = -EAGAIN;
+ 
+-	spin_lock_irq(&tsk->sighand->siglock);
++	my_bpf_spin_lock_irq(&tsk->sighand->siglock, num_policy);
+ 	if (!signal_group_exit(tsk->signal)) {
+ 		mm->core_state = core_state;
+ 		tsk->signal->group_exit_task = tsk;
+ 		nr = zap_process(tsk, exit_code, 0);
+ 		clear_tsk_thread_flag(tsk, TIF_SIGPENDING);
+ 	}
+-	spin_unlock_irq(&tsk->sighand->siglock);
++	my_bpf_spin_unlock_irq(&tsk->sighand->siglock, num_policy);
+ 	if (unlikely(nr < 0))
+ 		return nr;
+ 
+@@ -473,15 +475,16 @@
+ 
+ static void coredump_finish(struct mm_struct *mm, bool core_dumped)
+ {
++	extern int num_policy;
+ 	struct core_thread *curr, *next;
+ 	struct task_struct *task;
+ 
+-	spin_lock_irq(&current->sighand->siglock);
++	my_bpf_spin_lock_irq(&current->sighand->siglock, num_policy);
+ 	if (core_dumped && !__fatal_signal_pending(current))
+ 		current->signal->group_exit_code |= 0x80;
+ 	current->signal->group_exit_task = NULL;
+ 	current->signal->flags = SIGNAL_GROUP_EXIT;
+-	spin_unlock_irq(&current->sighand->siglock);
++	my_bpf_spin_unlock_irq(&current->sighand->siglock, num_policy);
+ 
+ 	next = mm->core_state->dumper.next;
+ 	while ((curr = next) != NULL) {
+diff -ruN SynCord-linux-base/fs/signalfd.c SynCord-linux-destination/fs/signalfd.c
+--- SynCord-linux-base/fs/signalfd.c	2023-09-07 12:03:12.752141525 +0000
++++ SynCord-linux-destination/fs/signalfd.c	2023-09-07 12:06:26.220382633 +0000
+@@ -32,6 +32,7 @@
+ #include <linux/syscalls.h>
+ #include <linux/proc_fs.h>
+ #include <linux/compat.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ void signalfd_cleanup(struct sighand_struct *sighand)
+ {
+@@ -60,17 +61,18 @@
+ 
+ static __poll_t signalfd_poll(struct file *file, poll_table *wait)
+ {
++	extern int num_policy;
+ 	struct signalfd_ctx *ctx = file->private_data;
+ 	__poll_t events = 0;
+ 
+ 	poll_wait(file, &current->sighand->signalfd_wqh, wait);
+ 
+-	spin_lock_irq(&current->sighand->siglock);
++	my_bpf_spin_lock_irq(&current->sighand->siglock, num_policy);
+ 	if (next_signal(&current->pending, &ctx->sigmask) ||
+ 	    next_signal(&current->signal->shared_pending,
+ 			&ctx->sigmask))
+ 		events |= EPOLLIN;
+-	spin_unlock_irq(&current->sighand->siglock);
++	my_bpf_spin_unlock_irq(&current->sighand->siglock, num_policy);
+ 
+ 	return events;
+ }
+@@ -169,7 +171,8 @@
+ 	ssize_t ret;
+ 	DECLARE_WAITQUEUE(wait, current);
+ 
+-	spin_lock_irq(&current->sighand->siglock);
++	extern int num_policy;
++	my_bpf_spin_lock_irq(&current->sighand->siglock, num_policy);
+ 	ret = dequeue_signal(current, &ctx->sigmask, info);
+ 	switch (ret) {
+ 	case 0:
+@@ -178,12 +181,14 @@
+ 		ret = -EAGAIN;
+ 		/* fall through */
+ 	default:
+-		spin_unlock_irq(&current->sighand->siglock);
++		{extern int num_policy;
++		my_bpf_spin_unlock_irq(&current->sighand->siglock, num_policy);}
+ 		return ret;
+ 	}
+ 
+ 	add_wait_queue(&current->sighand->signalfd_wqh, &wait);
+ 	for (;;) {
++		extern int num_policy;
+ 		set_current_state(TASK_INTERRUPTIBLE);
+ 		ret = dequeue_signal(current, &ctx->sigmask, info);
+ 		if (ret != 0)
+@@ -192,11 +197,13 @@
+ 			ret = -ERESTARTSYS;
+ 			break;
+ 		}
+-		spin_unlock_irq(&current->sighand->siglock);
++		extern int num_policy;
++		my_bpf_spin_unlock_irq(&current->sighand->siglock, num_policy);
+ 		schedule();
+-		spin_lock_irq(&current->sighand->siglock);
++		my_bpf_spin_lock_irq(&current->sighand->siglock, num_policy);
+ 	}
+-	spin_unlock_irq(&current->sighand->siglock);
++	extern int num_policy;
++	my_bpf_spin_unlock_irq(&current->sighand->siglock, num_policy);
+ 
+ 	remove_wait_queue(&current->sighand->signalfd_wqh, &wait);
+ 	__set_current_state(TASK_RUNNING);
+@@ -290,6 +297,7 @@
+ 		if (ufd < 0)
+ 			kfree(ctx);
+ 	} else {
++		extern int num_policy;
+ 		struct fd f = fdget(ufd);
+ 		if (!f.file)
+ 			return -EBADF;
+@@ -298,9 +306,9 @@
+ 			fdput(f);
+ 			return -EINVAL;
+ 		}
+-		spin_lock_irq(&current->sighand->siglock);
++		my_bpf_spin_lock_irq(&current->sighand->siglock, num_policy);
+ 		ctx->sigmask = *mask;
+-		spin_unlock_irq(&current->sighand->siglock);
++		my_bpf_spin_unlock_irq(&current->sighand->siglock, num_policy);
+ 
+ 		wake_up(&current->sighand->signalfd_wqh);
+ 		fdput(f);
+diff -ruN SynCord-linux-base/include/linux/my_bpf_spin_lock.h SynCord-linux-destination/include/linux/my_bpf_spin_lock.h
+--- SynCord-linux-base/include/linux/my_bpf_spin_lock.h	1970-01-01 00:00:00.000000000 +0000
++++ SynCord-linux-destination/include/linux/my_bpf_spin_lock.h	2023-09-07 12:07:08.812495295 +0000
+@@ -0,0 +1,43 @@
++#ifndef MY_BPF_SPIN_H
++#define MY_BPF_SPIN_H
++#define bpf_arch_spin_lock(l,policy) bpf_queued_spin_lock(l,policy) 
++static inline void bpf_do_raw_spin_lock(raw_spinlock_t *lock, int policy) __acquires(lock)
++{
++	__acquire(lock);
++	bpf_arch_spin_lock(&lock->raw_lock,policy);
++	mmiowb_spin_lock();
++}
++static inline void bpf___raw_spin_lock_irq(raw_spinlock_t *lock, int policy)
++{
++	local_irq_disable();
++	preempt_disable();
++	spin_acquire(&lock->dep_map, 0, 0, _RET_IP_);
++	bpf_do_raw_spin_lock(lock,policy);
++}
++#define bpf__raw_spin_lock_irq(lock,policy) bpf___raw_spin_lock_irq(lock,policy) 
++#define bpf_raw_spin_lock_irq(lock,policy) bpf__raw_spin_lock_irq(lock,policy) 
++static __always_inline void my_bpf_spin_lock_irq(spinlock_t *lock, int policy)
++{
++	bpf_raw_spin_lock_irq(&lock->rlock,policy);
++}
++#define bpf_arch_spin_unlock(l,policy) bpf_queued_spin_unlock(l,policy) 
++static inline void bpf_do_raw_spin_unlock(raw_spinlock_t *lock, int policy) __releases(lock)
++{
++	mmiowb_spin_unlock();
++	bpf_arch_spin_unlock(&lock->raw_lock,policy);
++	__release(lock);
++}
++static inline void bpf___raw_spin_unlock_irq(raw_spinlock_t *lock, int policy)
++{
++	spin_release(&lock->dep_map, 1, _RET_IP_);
++	bpf_do_raw_spin_unlock(lock,policy);
++	local_irq_enable();
++	preempt_enable();
++}
++#define bpf__raw_spin_unlock_irq(lock,policy) bpf___raw_spin_unlock_irq(lock,policy) 
++#define bpf_raw_spin_unlock_irq(lock,policy) bpf__raw_spin_unlock_irq(lock,policy) 
++static __always_inline void my_bpf_spin_unlock_irq(spinlock_t *lock, int policy)
++{
++	bpf_raw_spin_unlock_irq(&lock->rlock,policy);
++}
++#endif
+\ No newline at end of file
+diff -ruN SynCord-linux-base/kernel/acct.c SynCord-linux-destination/kernel/acct.c
+--- SynCord-linux-base/kernel/acct.c	2023-09-07 12:03:12.752141525 +0000
++++ SynCord-linux-destination/kernel/acct.c	2023-09-07 12:06:46.360433590 +0000
+@@ -58,6 +58,7 @@
+ #include <linux/mount.h>
+ #include <linux/uaccess.h>
+ #include <linux/sched/cputime.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <asm/div64.h>
+ #include <linux/blkdev.h> /* sector_div */
+@@ -414,6 +415,7 @@
+ 
+ static void fill_ac(acct_t *ac)
+ {
++	extern int num_policy;
+ 	struct pacct_struct *pacct = &current->signal->pacct;
+ 	u64 elapsed, run_time;
+ 	struct tty_struct *tty;
+@@ -453,7 +455,7 @@
+ 	ac->ac_ahz = AHZ;
+ #endif
+ 
+-	spin_lock_irq(&current->sighand->siglock);
++	my_bpf_spin_lock_irq(&current->sighand->siglock, num_policy);
+ 	tty = current->signal->tty;	/* Safe as we hold the siglock */
+ 	ac->ac_tty = tty ? old_encode_dev(tty_devnum(tty)) : 0;
+ 	ac->ac_utime = encode_comp_t(nsec_to_AHZ(pacct->ac_utime));
+@@ -463,7 +465,7 @@
+ 	ac->ac_minflt = encode_comp_t(pacct->ac_minflt);
+ 	ac->ac_majflt = encode_comp_t(pacct->ac_majflt);
+ 	ac->ac_exitcode = pacct->ac_exitcode;
+-	spin_unlock_irq(&current->sighand->siglock);
++	my_bpf_spin_unlock_irq(&current->sighand->siglock, num_policy);
+ }
+ /*
+  *  do_acct_process does all actual work. Caller holds the reference to file.
+@@ -532,6 +534,7 @@
+  */
+ void acct_collect(long exitcode, int group_dead)
+ {
++	extern int num_policy;
+ 	struct pacct_struct *pacct = &current->signal->pacct;
+ 	u64 utime, stime;
+ 	unsigned long vsize = 0;
+@@ -548,7 +551,7 @@
+ 		up_read(&current->mm->mmap_sem);
+ 	}
+ 
+-	spin_lock_irq(&current->sighand->siglock);
++	my_bpf_spin_lock_irq(&current->sighand->siglock, num_policy);
+ 	if (group_dead)
+ 		pacct->ac_mem = vsize / 1024;
+ 	if (thread_group_leader(current)) {
+@@ -568,7 +571,7 @@
+ 	pacct->ac_stime += stime;
+ 	pacct->ac_minflt += current->min_flt;
+ 	pacct->ac_majflt += current->maj_flt;
+-	spin_unlock_irq(&current->sighand->siglock);
++	my_bpf_spin_unlock_irq(&current->sighand->siglock, num_policy);
+ }
+ 
+ static void slow_acct_process(struct pid_namespace *ns)
+diff -ruN SynCord-linux-base/kernel/bpf/inode.c SynCord-linux-destination/kernel/bpf/inode.c
+--- SynCord-linux-base/kernel/bpf/inode.c	2023-09-07 12:03:12.752141525 +0000
++++ SynCord-linux-destination/kernel/bpf/inode.c	2023-09-07 12:05:28.308260869 +0000
+@@ -701,3 +701,76 @@
+ 	return ret;
+ }
+ fs_initcall(bpf_init);
++
++#include "kpatch-macros.h"
++#define MAX_POLICY 5
++
++static inline __u64 ptr_to_u64(const void *ptr)
++{
++    return (__u64) (unsigned long) ptr;
++}
++
++static void *get_pinned_bpf_obj(const char *pathname){
++	struct inode *inode;
++	struct path path;
++	void *raw;
++	int ret;
++
++	/* Let's get BPF prog 1 */
++	ret = kern_path(pathname, LOOKUP_FOLLOW, &path);
++	if (ret){
++		printk("[syncord] %s failed\n", pathname);
++		return ERR_PTR(ret);
++	}
++
++	inode = d_backing_inode(path.dentry);
++	ret = inode_permission(inode, ACC_MODE(2));
++	if(ret){
++		printk("[syncord] perm error\n");
++		path_put(&path);
++		return ERR_PTR(ret);
++	}
++
++	raw = bpf_any_get(inode->i_private, BPF_TYPE_PROG);
++	if(!IS_ERR(raw)){
++		touch_atime(&path);
++	}
++	else{
++		printk("[syncord] raw error\n");
++		path_put(&path);
++		return ERR_PTR(ret);
++	}
++
++	path_put(&path);
++	return raw;
++}
++
++static int pre_patch_callback(patch_object *obj)
++{
++	extern int num_policy;
++	extern void *bpf_prog_should_reorder[MAX_POLICY];
++
++	if(num_policy < 4)
++		num_policy++;
++	else
++		return -1;
++
++	bpf_prog_should_reorder[num_policy] = get_pinned_bpf_obj("/sys/fs/bpf/numa-grouping");
++	if(IS_ERR(bpf_prog_should_reorder[num_policy])){
++		printk("[syncord] bpf_policy failed\n");
++		return -1;
++	}
++
++	return 0;
++}
++
++static void post_unpatch_callback(patch_object *obj) {
++	extern int num_policy;
++	extern void *bpf_prog_should_reorder[MAX_POLICY];
++
++	bpf_prog_should_reorder[num_policy] = NULL;
++	num_policy--;
++	klp_shadow_free_all(0, NULL);
++}
++KPATCH_PRE_PATCH_CALLBACK(pre_patch_callback);
++KPATCH_POST_UNPATCH_CALLBACK(post_unpatch_callback);
+diff -ruN SynCord-linux-base/kernel/events/uprobes.c SynCord-linux-destination/kernel/events/uprobes.c
+--- SynCord-linux-base/kernel/events/uprobes.c	2023-09-07 12:03:12.752141525 +0000
++++ SynCord-linux-destination/kernel/events/uprobes.c	2023-09-07 12:06:46.636434317 +0000
+@@ -27,6 +27,7 @@
+ #include <linux/task_work.h>
+ #include <linux/shmem_fs.h>
+ #include <linux/khugepaged.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <linux/uprobes.h>
+ 
+@@ -1975,9 +1976,10 @@
+ 	WARN_ON_ONCE(utask->state != UTASK_SSTEP);
+ 
+ 	if (signal_pending(t)) {
+-		spin_lock_irq(&t->sighand->siglock);
++		extern int num_policy;
++		my_bpf_spin_lock_irq(&t->sighand->siglock, num_policy);
+ 		clear_tsk_thread_flag(t, TIF_SIGPENDING);
+-		spin_unlock_irq(&t->sighand->siglock);
++		my_bpf_spin_unlock_irq(&t->sighand->siglock, num_policy);
+ 
+ 		if (__fatal_signal_pending(t) || arch_uprobe_xol_was_trapped(t)) {
+ 			utask->state = UTASK_SSTEP_TRAPPED;
+@@ -2258,6 +2260,7 @@
+  */
+ static void handle_singlestep(struct uprobe_task *utask, struct pt_regs *regs)
+ {
++	extern int num_policy;
+ 	struct uprobe *uprobe;
+ 	int err = 0;
+ 
+@@ -2274,9 +2277,9 @@
+ 	utask->state = UTASK_RUNNING;
+ 	xol_free_insn_slot(current);
+ 
+-	spin_lock_irq(&current->sighand->siglock);
++	my_bpf_spin_lock_irq(&current->sighand->siglock, num_policy);
+ 	recalc_sigpending(); /* see uprobe_deny_signal() */
+-	spin_unlock_irq(&current->sighand->siglock);
++	my_bpf_spin_unlock_irq(&current->sighand->siglock, num_policy);
+ 
+ 	if (unlikely(err)) {
+ 		uprobe_warn(current, "execute the probed insn, sending SIGILL.");
+diff -ruN SynCord-linux-base/kernel/exit.c SynCord-linux-destination/kernel/exit.c
+--- SynCord-linux-base/kernel/exit.c	2023-09-07 12:03:12.752141525 +0000
++++ SynCord-linux-destination/kernel/exit.c	2023-09-07 12:06:46.432433780 +0000
+@@ -63,6 +63,7 @@
+ #include <linux/random.h>
+ #include <linux/rcuwait.h>
+ #include <linux/compat.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <linux/uaccess.h>
+ #include <asm/unistd.h>
+@@ -904,9 +905,10 @@
+ 	if (signal_group_exit(sig))
+ 		exit_code = sig->group_exit_code;
+ 	else if (!thread_group_empty(current)) {
++		extern int num_policy;
+ 		struct sighand_struct *const sighand = current->sighand;
+ 
+-		spin_lock_irq(&sighand->siglock);
++		my_bpf_spin_lock_irq(&sighand->siglock, num_policy);
+ 		if (signal_group_exit(sig))
+ 			/* Another thread got here before we took the lock.  */
+ 			exit_code = sig->group_exit_code;
+@@ -915,7 +917,7 @@
+ 			sig->flags = SIGNAL_GROUP_EXIT;
+ 			zap_other_threads(current);
+ 		}
+-		spin_unlock_irq(&sighand->siglock);
++		my_bpf_spin_unlock_irq(&sighand->siglock, num_policy);
+ 	}
+ 
+ 	do_exit(exit_code);
+@@ -1030,6 +1032,7 @@
+ 	 * Check thread_group_leader() to exclude the traced sub-threads.
+ 	 */
+ 	if (state == EXIT_DEAD && thread_group_leader(p)) {
++		extern int num_policy;
+ 		struct signal_struct *sig = p->signal;
+ 		struct signal_struct *psig = current->signal;
+ 		unsigned long maxrss;
+@@ -1056,7 +1059,7 @@
+ 		 * in the group including the group leader.
+ 		 */
+ 		thread_group_cputime_adjusted(p, &tgutime, &tgstime);
+-		spin_lock_irq(&current->sighand->siglock);
++		my_bpf_spin_lock_irq(&current->sighand->siglock, num_policy);
+ 		write_seqlock(&psig->stats_lock);
+ 		psig->cutime += tgutime + sig->cutime;
+ 		psig->cstime += tgstime + sig->cstime;
+@@ -1081,7 +1084,7 @@
+ 		task_io_accounting_add(&psig->ioac, &p->ioac);
+ 		task_io_accounting_add(&psig->ioac, &sig->ioac);
+ 		write_sequnlock(&psig->stats_lock);
+-		spin_unlock_irq(&current->sighand->siglock);
++		my_bpf_spin_unlock_irq(&current->sighand->siglock, num_policy);
+ 	}
+ 
+ 	if (wo->wo_rusage)
+@@ -1155,6 +1158,7 @@
+ static int wait_task_stopped(struct wait_opts *wo,
+ 				int ptrace, struct task_struct *p)
+ {
++	extern int num_policy;
+ 	struct waitid_info *infop;
+ 	int exit_code, *p_code, why;
+ 	uid_t uid = 0; /* unneeded, required by compiler */
+@@ -1170,7 +1174,7 @@
+ 		return 0;
+ 
+ 	exit_code = 0;
+-	spin_lock_irq(&p->sighand->siglock);
++	my_bpf_spin_lock_irq(&p->sighand->siglock, num_policy);
+ 
+ 	p_code = task_stopped_code(p, ptrace);
+ 	if (unlikely(!p_code))
+@@ -1185,7 +1189,7 @@
+ 
+ 	uid = from_kuid_munged(current_user_ns(), task_uid(p));
+ unlock_sig:
+-	spin_unlock_irq(&p->sighand->siglock);
++	my_bpf_spin_unlock_irq(&p->sighand->siglock, num_policy);
+ 	if (!exit_code)
+ 		return 0;
+ 
+@@ -1226,6 +1230,7 @@
+  */
+ static int wait_task_continued(struct wait_opts *wo, struct task_struct *p)
+ {
++	extern int num_policy;
+ 	struct waitid_info *infop;
+ 	pid_t pid;
+ 	uid_t uid;
+@@ -1236,16 +1241,16 @@
+ 	if (!(p->signal->flags & SIGNAL_STOP_CONTINUED))
+ 		return 0;
+ 
+-	spin_lock_irq(&p->sighand->siglock);
++	my_bpf_spin_lock_irq(&p->sighand->siglock, num_policy);
+ 	/* Re-check with the lock held.  */
+ 	if (!(p->signal->flags & SIGNAL_STOP_CONTINUED)) {
+-		spin_unlock_irq(&p->sighand->siglock);
++		my_bpf_spin_unlock_irq(&p->sighand->siglock, num_policy);
+ 		return 0;
+ 	}
+ 	if (!unlikely(wo->wo_flags & WNOWAIT))
+ 		p->signal->flags &= ~SIGNAL_STOP_CONTINUED;
+ 	uid = from_kuid_munged(current_user_ns(), task_uid(p));
+-	spin_unlock_irq(&p->sighand->siglock);
++	my_bpf_spin_unlock_irq(&p->sighand->siglock, num_policy);
+ 
+ 	pid = task_pid_vnr(p);
+ 	get_task_struct(p);
+diff -ruN SynCord-linux-base/kernel/livepatch/transition.c SynCord-linux-destination/kernel/livepatch/transition.c
+--- SynCord-linux-base/kernel/livepatch/transition.c	2023-09-07 12:03:12.752141525 +0000
++++ SynCord-linux-destination/kernel/livepatch/transition.c	2023-09-07 12:06:46.392433674 +0000
+@@ -13,6 +13,7 @@
+ #include "patch.h"
+ #include "transition.h"
+ #include "../sched/sched.h"
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #define MAX_STACK_ENTRIES  100
+ #define STACK_ERR_BUF_SIZE 128
+@@ -365,13 +366,16 @@
+ 			 */
+ 			wake_up_state(task, TASK_INTERRUPTIBLE);
+ 		} else {
++			extern int num_policy;
+ 			/*
+ 			 * Send fake signal to all non-kthread tasks which are
+ 			 * still not migrated.
+ 			 */
+-			spin_lock_irq(&task->sighand->siglock);
++			my_bpf_spin_lock_irq(&task->sighand->siglock,
++					     num_policy);
+ 			signal_wake_up(task, 0);
+-			spin_unlock_irq(&task->sighand->siglock);
++			my_bpf_spin_unlock_irq(&task->sighand->siglock,
++					       num_policy);
+ 		}
+ 	}
+ 	read_unlock(&tasklist_lock);
+diff -ruN SynCord-linux-base/kernel/locking/qspinlock.c SynCord-linux-destination/kernel/locking/qspinlock.c
+--- SynCord-linux-base/kernel/locking/qspinlock.c	2023-09-07 12:03:12.752141525 +0000
++++ SynCord-linux-destination/kernel/locking/qspinlock.c	2023-09-07 12:05:28.308260869 +0000
+@@ -29,6 +29,9 @@
+  * Include queued spinlock statistics code
+  */
+ #include "qspinlock_stat.h"
++#include <linux/lock_policy.h>
++#include <linux/filter.h>
++#include <linux/livepatch.h>
+ 
+ /*
+  * The basic principle of a queue-based spinlock can best be understood
+@@ -172,6 +175,8 @@
+ 
+ #define MAX_POLICY 5
+ int num_policy = 0;
++int num_shuffle = 0;
++int num_notshuffle = 0;
+ void *bpf_prog_lock_to_acquire[MAX_POLICY];
+ void *bpf_prog_lock_acquired[MAX_POLICY];
+ void *bpf_prog_lock_to_release[MAX_POLICY];
+@@ -236,7 +241,15 @@
+ // Reordering APIs
+ static int syncord_should_reorder(struct qspinlock *lock, struct mcs_spinlock *node, struct mcs_spinlock *curr, int policy_id)
+ {
+-	return 0;
++	struct bpf_prog *prog;
++	prog = bpf_prog_should_reorder[policy_id];
++
++	struct lock_policy_args args;
++	args.numa_node = node->nid;
++	args.next_numa_node = curr->nid;
++
++	int ret = BPF_PROG_RUN(prog, &args);
++	return ret;
+ }
+ 
+ static int default_cmp_func(struct qspinlock *lock, struct mcs_spinlock *node, struct mcs_spinlock *curr){
+@@ -1018,7 +1031,7 @@
+ 	if (likely(atomic_try_cmpxchg_acquire(&lock->val, &val, _Q_LOCKED_VAL)))
+ 		return;
+ 
+-	queued_spin_lock_slowpath(lock, val, 0, 0);
++	queued_spin_lock_slowpath(lock, val, 1, 1);
+ }
+ EXPORT_SYMBOL(queued_spin_lock);
+ 
+diff -ruN SynCord-linux-base/kernel/pid_namespace.c SynCord-linux-destination/kernel/pid_namespace.c
+--- SynCord-linux-base/kernel/pid_namespace.c	2023-09-07 12:03:12.756141524 +0000
++++ SynCord-linux-destination/kernel/pid_namespace.c	2023-09-07 12:06:46.068432819 +0000
+@@ -23,6 +23,7 @@
+ #include <linux/sched/task.h>
+ #include <linux/sched/signal.h>
+ #include <linux/idr.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ static DEFINE_MUTEX(pid_caches_mutex);
+ static struct kmem_cache *pid_ns_cachep;
+@@ -180,6 +181,7 @@
+ 
+ void zap_pid_ns_processes(struct pid_namespace *pid_ns)
+ {
++	extern int num_policy;
+ 	int nr;
+ 	int rc;
+ 	struct task_struct *task, *me = current;
+@@ -194,9 +196,9 @@
+ 	 * This speeds up the namespace shutdown, plus see the comment
+ 	 * below.
+ 	 */
+-	spin_lock_irq(&me->sighand->siglock);
++	my_bpf_spin_lock_irq(&me->sighand->siglock, num_policy);
+ 	me->sighand->action[SIGCHLD - 1].sa.sa_handler = SIG_IGN;
+-	spin_unlock_irq(&me->sighand->siglock);
++	my_bpf_spin_unlock_irq(&me->sighand->siglock, num_policy);
+ 
+ 	/*
+ 	 * The last thread in the cgroup-init thread group is terminating.
+diff -ruN SynCord-linux-base/kernel/ptrace.c SynCord-linux-destination/kernel/ptrace.c
+--- SynCord-linux-base/kernel/ptrace.c	2023-09-07 12:03:12.756141524 +0000
++++ SynCord-linux-destination/kernel/ptrace.c	2023-09-07 12:06:46.648434348 +0000
+@@ -31,6 +31,7 @@
+ #include <linux/cn_proc.h>
+ #include <linux/compat.h>
+ #include <linux/sched/signal.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <asm/syscall.h>	/* for syscall_get_* */
+ 
+@@ -172,24 +173,26 @@
+ /* Ensure that nothing can wake it up, even SIGKILL */
+ static bool ptrace_freeze_traced(struct task_struct *task)
+ {
++	extern int num_policy;
+ 	bool ret = false;
+ 
+ 	/* Lockless, nobody but us can set this flag */
+ 	if (task->jobctl & JOBCTL_LISTENING)
+ 		return ret;
+ 
+-	spin_lock_irq(&task->sighand->siglock);
++	my_bpf_spin_lock_irq(&task->sighand->siglock, num_policy);
+ 	if (task_is_traced(task) && !__fatal_signal_pending(task)) {
+ 		task->state = __TASK_TRACED;
+ 		ret = true;
+ 	}
+-	spin_unlock_irq(&task->sighand->siglock);
++	my_bpf_spin_unlock_irq(&task->sighand->siglock, num_policy);
+ 
+ 	return ret;
+ }
+ 
+ static void ptrace_unfreeze_traced(struct task_struct *task)
+ {
++	extern int num_policy;
+ 	if (task->state != __TASK_TRACED)
+ 		return;
+ 
+@@ -199,14 +202,14 @@
+ 	 * PTRACE_LISTEN can allow ptrace_trap_notify to wake us up remotely.
+ 	 * Recheck state under the lock to close this race.
+ 	 */
+-	spin_lock_irq(&task->sighand->siglock);
++	my_bpf_spin_lock_irq(&task->sighand->siglock, num_policy);
+ 	if (task->state == __TASK_TRACED) {
+ 		if (__fatal_signal_pending(task))
+ 			wake_up_state(task, __TASK_TRACED);
+ 		else
+ 			task->state = TASK_TRACED;
+ 	}
+-	spin_unlock_irq(&task->sighand->siglock);
++	my_bpf_spin_unlock_irq(&task->sighand->siglock, num_policy);
+ }
+ 
+ /**
+@@ -728,11 +731,12 @@
+ 		pending = &child->pending;
+ 
+ 	for (i = 0; i < arg.nr; ) {
++		extern int num_policy;
+ 		kernel_siginfo_t info;
+ 		unsigned long off = arg.off + i;
+ 		bool found = false;
+ 
+-		spin_lock_irq(&child->sighand->siglock);
++		my_bpf_spin_lock_irq(&child->sighand->siglock, num_policy);
+ 		list_for_each_entry(q, &pending->list, list) {
+ 			if (!off--) {
+ 				found = true;
+@@ -740,7 +744,7 @@
+ 				break;
+ 			}
+ 		}
+-		spin_unlock_irq(&child->sighand->siglock);
++		my_bpf_spin_unlock_irq(&child->sighand->siglock, num_policy);
+ 
+ 		if (!found) /* beyond the end of the list */
+ 			break;
+@@ -844,12 +848,16 @@
+ 	 * takes siglock after resume.
+ 	 */
+ 	need_siglock = data && !thread_group_empty(current);
+-	if (need_siglock)
+-		spin_lock_irq(&child->sighand->siglock);
++	if (need_siglock) {
++		extern int num_policy;
++		my_bpf_spin_lock_irq(&child->sighand->siglock, num_policy);
++	}
+ 	child->exit_code = data;
+ 	wake_up_state(child, __TASK_TRACED);
+-	if (need_siglock)
+-		spin_unlock_irq(&child->sighand->siglock);
++	if (need_siglock) {
++		extern int num_policy;
++		my_bpf_spin_unlock_irq(&child->sighand->siglock, num_policy);
++	}
+ 
+ 	return 0;
+ }
+@@ -1060,6 +1068,7 @@
+ 	}
+ 
+ 	case PTRACE_SETSIGMASK: {
++		extern int num_policy;
+ 		sigset_t new_set;
+ 
+ 		if (addr != sizeof(sigset_t)) {
+@@ -1079,9 +1088,9 @@
+ 		 * retarget_shared_pending() and recalc_sigpending() are not
+ 		 * called here.
+ 		 */
+-		spin_lock_irq(&child->sighand->siglock);
++		my_bpf_spin_lock_irq(&child->sighand->siglock, num_policy);
+ 		child->blocked = new_set;
+-		spin_unlock_irq(&child->sighand->siglock);
++		my_bpf_spin_unlock_irq(&child->sighand->siglock, num_policy);
+ 
+ 		clear_tsk_restore_sigmask(child);
+ 
+diff -ruN SynCord-linux-base/kernel/seccomp.c SynCord-linux-destination/kernel/seccomp.c
+--- SynCord-linux-base/kernel/seccomp.c	2023-09-07 12:03:12.756141524 +0000
++++ SynCord-linux-destination/kernel/seccomp.c	2023-09-07 12:06:46.284433389 +0000
+@@ -27,6 +27,7 @@
+ #include <linux/slab.h>
+ #include <linux/syscalls.h>
+ #include <linux/sysctl.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #ifdef CONFIG_HAVE_ARCH_SECCOMP_FILTER
+ #include <asm/syscall.h>
+@@ -955,10 +956,11 @@
+  */
+ static long seccomp_set_mode_strict(void)
+ {
++	extern int num_policy;
+ 	const unsigned long seccomp_mode = SECCOMP_MODE_STRICT;
+ 	long ret = -EINVAL;
+ 
+-	spin_lock_irq(&current->sighand->siglock);
++	my_bpf_spin_lock_irq(&current->sighand->siglock, num_policy);
+ 
+ 	if (!seccomp_may_assign_mode(seccomp_mode))
+ 		goto out;
+@@ -970,7 +972,7 @@
+ 	ret = 0;
+ 
+ out:
+-	spin_unlock_irq(&current->sighand->siglock);
++	my_bpf_spin_unlock_irq(&current->sighand->siglock, num_policy);
+ 
+ 	return ret;
+ }
+@@ -1251,6 +1253,7 @@
+ static long seccomp_set_mode_filter(unsigned int flags,
+ 				    const char __user *filter)
+ {
++	extern int num_policy;
+ 	const unsigned long seccomp_mode = SECCOMP_MODE_FILTER;
+ 	struct seccomp_filter *prepared = NULL;
+ 	long ret = -EINVAL;
+@@ -1299,7 +1302,7 @@
+ 	    mutex_lock_killable(&current->signal->cred_guard_mutex))
+ 		goto out_put_fd;
+ 
+-	spin_lock_irq(&current->sighand->siglock);
++	my_bpf_spin_lock_irq(&current->sighand->siglock, num_policy);
+ 
+ 	if (!seccomp_may_assign_mode(seccomp_mode))
+ 		goto out;
+@@ -1312,7 +1315,7 @@
+ 
+ 	seccomp_assign_mode(current, seccomp_mode, flags);
+ out:
+-	spin_unlock_irq(&current->sighand->siglock);
++	my_bpf_spin_unlock_irq(&current->sighand->siglock, num_policy);
+ 	if (flags & SECCOMP_FILTER_FLAG_TSYNC)
+ 		mutex_unlock(&current->signal->cred_guard_mutex);
+ out_put_fd:
+@@ -1446,6 +1449,7 @@
+ static struct seccomp_filter *get_nth_filter(struct task_struct *task,
+ 					     unsigned long filter_off)
+ {
++	extern int num_policy;
+ 	struct seccomp_filter *orig, *filter;
+ 	unsigned long count;
+ 
+@@ -1453,16 +1457,16 @@
+ 	 * Note: this is only correct because the caller should be the (ptrace)
+ 	 * tracer of the task, otherwise lock_task_sighand is needed.
+ 	 */
+-	spin_lock_irq(&task->sighand->siglock);
++	my_bpf_spin_lock_irq(&task->sighand->siglock, num_policy);
+ 
+ 	if (task->seccomp.mode != SECCOMP_MODE_FILTER) {
+-		spin_unlock_irq(&task->sighand->siglock);
++		my_bpf_spin_unlock_irq(&task->sighand->siglock, num_policy);
+ 		return ERR_PTR(-EINVAL);
+ 	}
+ 
+ 	orig = task->seccomp.filter;
+ 	__get_seccomp_filter(orig);
+-	spin_unlock_irq(&task->sighand->siglock);
++	my_bpf_spin_unlock_irq(&task->sighand->siglock, num_policy);
+ 
+ 	count = 0;
+ 	for (filter = orig; filter; filter = filter->prev)
+diff -ruN SynCord-linux-base/kernel/signal.c SynCord-linux-destination/kernel/signal.c
+--- SynCord-linux-base/kernel/signal.c	2023-09-07 12:03:12.756141524 +0000
++++ SynCord-linux-destination/kernel/signal.c	2023-09-07 12:06:46.196433158 +0000
+@@ -46,6 +46,7 @@
+ #include <linux/livepatch.h>
+ #include <linux/cgroup.h>
+ #include <linux/audit.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #define CREATE_TRACE_POINTS
+ #include <trace/events/signal.h>
+diff -ruN SynCord-linux-base/kernel/taskstats.c SynCord-linux-destination/kernel/taskstats.c
+--- SynCord-linux-base/kernel/taskstats.c	2023-09-07 12:03:12.756141524 +0000
++++ SynCord-linux-destination/kernel/taskstats.c	2023-09-07 12:06:46.080432851 +0000
+@@ -21,6 +21,7 @@
+ #include <net/genetlink.h>
+ #include <linux/atomic.h>
+ #include <linux/sched/cputime.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ /*
+  * Maximum length of a cpumask that can be specified in
+@@ -553,6 +554,7 @@
+ 
+ static struct taskstats *taskstats_tgid_alloc(struct task_struct *tsk)
+ {
++	extern int num_policy;
+ 	struct signal_struct *sig = tsk->signal;
+ 	struct taskstats *stats;
+ 
+@@ -562,12 +564,12 @@
+ 	/* No problem if kmem_cache_zalloc() fails */
+ 	stats = kmem_cache_zalloc(taskstats_cache, GFP_KERNEL);
+ 
+-	spin_lock_irq(&tsk->sighand->siglock);
++	my_bpf_spin_lock_irq(&tsk->sighand->siglock, num_policy);
+ 	if (!sig->stats) {
+ 		sig->stats = stats;
+ 		stats = NULL;
+ 	}
+-	spin_unlock_irq(&tsk->sighand->siglock);
++	my_bpf_spin_unlock_irq(&tsk->sighand->siglock, num_policy);
+ 
+ 	if (stats)
+ 		kmem_cache_free(taskstats_cache, stats);
+diff -ruN SynCord-linux-base/kernel/time/itimer.c SynCord-linux-destination/kernel/time/itimer.c
+--- SynCord-linux-base/kernel/time/itimer.c	2023-09-07 12:03:12.756141524 +0000
++++ SynCord-linux-destination/kernel/time/itimer.c	2023-09-07 12:06:46.880434960 +0000
+@@ -15,6 +15,7 @@
+ #include <linux/hrtimer.h>
+ #include <trace/events/timer.h>
+ #include <linux/compat.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <linux/uaccess.h>
+ 
+@@ -47,10 +48,11 @@
+ static void get_cpu_itimer(struct task_struct *tsk, unsigned int clock_id,
+ 			   struct itimerval *const value)
+ {
++	extern int num_policy;
+ 	u64 val, interval;
+ 	struct cpu_itimer *it = &tsk->signal->it[clock_id];
+ 
+-	spin_lock_irq(&tsk->sighand->siglock);
++	my_bpf_spin_lock_irq(&tsk->sighand->siglock, num_policy);
+ 
+ 	val = it->expires;
+ 	interval = it->incr;
+@@ -67,7 +69,7 @@
+ 			val -= t;
+ 	}
+ 
+-	spin_unlock_irq(&tsk->sighand->siglock);
++	my_bpf_spin_unlock_irq(&tsk->sighand->siglock, num_policy);
+ 
+ 	value->it_value = ns_to_timeval(val);
+ 	value->it_interval = ns_to_timeval(interval);
+@@ -79,11 +81,13 @@
+ 
+ 	switch (which) {
+ 	case ITIMER_REAL:
+-		spin_lock_irq(&tsk->sighand->siglock);
++		{extern int num_policy;
++		my_bpf_spin_lock_irq(&tsk->sighand->siglock, num_policy);}
+ 		value->it_value = itimer_get_remtime(&tsk->signal->real_timer);
+ 		value->it_interval =
+ 			ktime_to_timeval(tsk->signal->it_real_incr);
+-		spin_unlock_irq(&tsk->sighand->siglock);
++		{extern int num_policy;
++		my_bpf_spin_unlock_irq(&tsk->sighand->siglock, num_policy);}
+ 		break;
+ 	case ITIMER_VIRTUAL:
+ 		get_cpu_itimer(tsk, CPUCLOCK_VIRT, value);
+@@ -144,6 +148,7 @@
+ 			   const struct itimerval *const value,
+ 			   struct itimerval *const ovalue)
+ {
++	extern int num_policy;
+ 	u64 oval, nval, ointerval, ninterval;
+ 	struct cpu_itimer *it = &tsk->signal->it[clock_id];
+ 
+@@ -154,7 +159,7 @@
+ 	nval = ktime_to_ns(timeval_to_ktime(value->it_value));
+ 	ninterval = ktime_to_ns(timeval_to_ktime(value->it_interval));
+ 
+-	spin_lock_irq(&tsk->sighand->siglock);
++	my_bpf_spin_lock_irq(&tsk->sighand->siglock, num_policy);
+ 
+ 	oval = it->expires;
+ 	ointerval = it->incr;
+@@ -168,7 +173,7 @@
+ 	trace_itimer_state(clock_id == CPUCLOCK_VIRT ?
+ 			   ITIMER_VIRTUAL : ITIMER_PROF, value, nval);
+ 
+-	spin_unlock_irq(&tsk->sighand->siglock);
++	my_bpf_spin_unlock_irq(&tsk->sighand->siglock, num_policy);
+ 
+ 	if (ovalue) {
+ 		ovalue->it_value = ns_to_timeval(oval);
+@@ -198,7 +203,8 @@
+ 	switch (which) {
+ 	case ITIMER_REAL:
+ again:
+-		spin_lock_irq(&tsk->sighand->siglock);
++		{extern int num_policy;
++		my_bpf_spin_lock_irq(&tsk->sighand->siglock, num_policy);}
+ 		timer = &tsk->signal->real_timer;
+ 		if (ovalue) {
+ 			ovalue->it_value = itimer_get_remtime(timer);
+@@ -207,7 +213,9 @@
+ 		}
+ 		/* We are sharing ->siglock with it_real_fn() */
+ 		if (hrtimer_try_to_cancel(timer) < 0) {
+-			spin_unlock_irq(&tsk->sighand->siglock);
++			extern int num_policy;
++			my_bpf_spin_unlock_irq(&tsk->sighand->siglock,
++					       num_policy);
+ 			hrtimer_cancel_wait_running(timer);
+ 			goto again;
+ 		}
+@@ -220,7 +228,8 @@
+ 			tsk->signal->it_real_incr = 0;
+ 
+ 		trace_itimer_state(ITIMER_REAL, value, 0);
+-		spin_unlock_irq(&tsk->sighand->siglock);
++		extern int num_policy;
++		my_bpf_spin_unlock_irq(&tsk->sighand->siglock, num_policy);
+ 		break;
+ 	case ITIMER_VIRTUAL:
+ 		set_cpu_itimer(tsk, CPUCLOCK_VIRT, value, ovalue);
+diff -ruN SynCord-linux-base/kernel/time/posix-cpu-timers.c SynCord-linux-destination/kernel/time/posix-cpu-timers.c
+--- SynCord-linux-base/kernel/time/posix-cpu-timers.c	2023-09-07 12:03:12.756141524 +0000
++++ SynCord-linux-destination/kernel/time/posix-cpu-timers.c	2023-09-07 12:06:46.804434760 +0000
+@@ -15,6 +15,7 @@
+ #include <linux/workqueue.h>
+ #include <linux/compat.h>
+ #include <linux/sched/deadline.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include "posix-timers.h"
+ 
+@@ -37,11 +38,12 @@
+  */
+ void update_rlimit_cpu(struct task_struct *task, unsigned long rlim_new)
+ {
++	extern int num_policy;
+ 	u64 nsecs = rlim_new * NSEC_PER_SEC;
+ 
+-	spin_lock_irq(&task->sighand->siglock);
++	my_bpf_spin_lock_irq(&task->sighand->siglock, num_policy);
+ 	set_process_cpu_timer(task, CPUCLOCK_PROF, &nsecs, NULL);
+-	spin_unlock_irq(&task->sighand->siglock);
++	my_bpf_spin_unlock_irq(&task->sighand->siglock, num_policy);
+ }
+ 
+ /*
+diff -ruN SynCord-linux-base/kernel/time/posix-timers.c SynCord-linux-destination/kernel/time/posix-timers.c
+--- SynCord-linux-base/kernel/time/posix-timers.c	2023-09-07 12:03:12.756141524 +0000
++++ SynCord-linux-destination/kernel/time/posix-timers.c	2023-09-07 12:06:46.836434844 +0000
+@@ -15,6 +15,7 @@
+ #include <linux/time.h>
+ #include <linux/mutex.h>
+ #include <linux/sched/task.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <linux/uaccess.h>
+ #include <linux/list.h>
+@@ -472,6 +473,7 @@
+ static int do_timer_create(clockid_t which_clock, struct sigevent *event,
+ 			   timer_t __user *created_timer_id)
+ {
++	extern int num_policy;
+ 	const struct k_clock *kc = clockid_to_kclock(which_clock);
+ 	struct k_itimer *new_timer;
+ 	int error, new_timer_id;
+@@ -531,10 +533,10 @@
+ 	if (error)
+ 		goto out;
+ 
+-	spin_lock_irq(&current->sighand->siglock);
++	my_bpf_spin_lock_irq(&current->sighand->siglock, num_policy);
+ 	new_timer->it_signal = current->signal;
+ 	list_add(&new_timer->list, &current->signal->posix_timers);
+-	spin_unlock_irq(&current->sighand->siglock);
++	my_bpf_spin_unlock_irq(&current->sighand->siglock, num_policy);
+ 
+ 	return 0;
+ 	/*
+diff -ruN SynCord-linux-base/kernel/umh.c SynCord-linux-destination/kernel/umh.c
+--- SynCord-linux-base/kernel/umh.c	2023-09-07 12:03:12.756141524 +0000
++++ SynCord-linux-destination/kernel/umh.c	2023-09-07 12:06:46.212433200 +0000
+@@ -28,6 +28,7 @@
+ #include <linux/uaccess.h>
+ #include <linux/shmem_fs.h>
+ #include <linux/pipe_fs_i.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <trace/events/module.h>
+ 
+@@ -67,13 +68,14 @@
+  */
+ static int call_usermodehelper_exec_async(void *data)
+ {
++	extern int num_policy;
+ 	struct subprocess_info *sub_info = data;
+ 	struct cred *new;
+ 	int retval;
+ 
+-	spin_lock_irq(&current->sighand->siglock);
++	my_bpf_spin_lock_irq(&current->sighand->siglock, num_policy);
+ 	flush_signal_handlers(current, 1);
+-	spin_unlock_irq(&current->sighand->siglock);
++	my_bpf_spin_unlock_irq(&current->sighand->siglock, num_policy);
+ 
+ 	/*
+ 	 * Our parent (unbound workqueue) runs with elevated scheduling
+diff -ruN SynCord-linux-base/security/selinux/hooks.c SynCord-linux-destination/security/selinux/hooks.c
+--- SynCord-linux-base/security/selinux/hooks.c	2023-09-07 12:03:12.756141524 +0000
++++ SynCord-linux-destination/security/selinux/hooks.c	2023-09-07 12:06:48.388438954 +0000
+@@ -91,6 +91,7 @@
+ #include <uapi/linux/mount.h>
+ #include <linux/fsnotify.h>
+ #include <linux/fanotify.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include "avc.h"
+ #include "objsec.h"
+@@ -2569,12 +2570,13 @@
+ 	rc = avc_has_perm(&selinux_state,
+ 			  osid, sid, SECCLASS_PROCESS, PROCESS__SIGINH, NULL);
+ 	if (rc) {
++		extern int num_policy;
+ 		if (IS_ENABLED(CONFIG_POSIX_TIMERS)) {
+ 			memset(&itimer, 0, sizeof itimer);
+ 			for (i = 0; i < 3; i++)
+ 				do_setitimer(i, &itimer, NULL);
+ 		}
+-		spin_lock_irq(&current->sighand->siglock);
++		my_bpf_spin_lock_irq(&current->sighand->siglock, num_policy);
+ 		if (!fatal_signal_pending(current)) {
+ 			flush_sigqueue(&current->pending);
+ 			flush_sigqueue(&current->signal->shared_pending);
+@@ -2582,7 +2584,7 @@
+ 			sigemptyset(&current->blocked);
+ 			recalc_sigpending();
+ 		}
+-		spin_unlock_irq(&current->sighand->siglock);
++		my_bpf_spin_unlock_irq(&current->sighand->siglock, num_policy);
+ 	}
+ 
+ 	/* Wake up the parent if it is waiting so that it can recheck

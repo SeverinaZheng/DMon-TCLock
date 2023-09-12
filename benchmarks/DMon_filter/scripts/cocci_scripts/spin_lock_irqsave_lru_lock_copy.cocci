@@ -59,13 +59,3 @@ identifier m =~ "spin_unlock_irqrestore$";
 ...
 }
 
-@@
-expression p;
-identifier n =~ "spin_lock_irqsave$";
-identifier m =~ "spin_unlock_irqrestore$";
-@@
-
-- m(&p->lru_lock, flags);
-+ extern int num_policy;
-+ my_bpf_spin_unlock_irqrestore(&p->lru_lock, flags,num_policy);
-

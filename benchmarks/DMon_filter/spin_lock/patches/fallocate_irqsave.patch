@@ -1,0 +1,399 @@
+diff -ruN SynCord-linux-base/include/linux/my_bpf_spin_lock.h SynCord-linux-destination/include/linux/my_bpf_spin_lock.h
+--- SynCord-linux-base/include/linux/my_bpf_spin_lock.h	1970-01-01 00:00:00.000000000 +0000
++++ SynCord-linux-destination/include/linux/my_bpf_spin_lock.h	2023-09-05 13:56:31.086675449 +0000
+@@ -0,0 +1,69 @@
++#ifndef MY_BPF_SPIN_H
++#define MY_BPF_SPIN_H
++#define bpf_arch_spin_lock(l,policy) bpf_queued_spin_lock(l,policy) 
++static inline void bpf_do_raw_spin_lock(raw_spinlock_t *lock, int policy) __acquires(lock)
++{
++	__acquire(lock);
++	bpf_arch_spin_lock(&lock->raw_lock,policy);
++	mmiowb_spin_lock();
++}
++#define bpf_do_raw_spin_lock_flags(lock, flags,policy) bpf_do_raw_spin_lock(lock,policy) 
++#define bpf_arch_spin_lock_flags(lock, flags,policy) bpf_arch_spin_lock(lock,policy) 
++static inline unsigned long bpf___raw_spin_lock_irqsave(raw_spinlock_t *lock, int policy)
++{
++	unsigned long flags;
++
++	local_irq_save(flags);
++	preempt_disable();
++	spin_acquire(&lock->dep_map, 0, 0, _RET_IP_);
++	/*
++	 * On lockdep we dont want the hand-coded irq-enable of
++	 * do_raw_spin_lock_flags() code, because lockdep assumes
++	 * that interrupts are not re-enabled during lock-acquire:
++	 */
++#ifdef CONFIG_LOCKDEP
++	bpf_do_raw_spin_lock(lock,policy);
++#else
++	bpf_do_raw_spin_lock_flags(lock, &flags,policy);
++#endif
++	return flags;
++}
++#define bpf__raw_spin_lock_irqsave(lock,policy) bpf___raw_spin_lock_irqsave(lock,policy) 
++#define bpf_raw_spin_lock_irqsave(lock, flags, policy)			\
++	do {						\
++		typecheck(unsigned long, flags);	\
++		flags =bpf__raw_spin_lock_irqsave(lock,policy);	\
++	} while (0)
++#define my_bpf_spin_lock_irqsave(lock, flags, policy)				\
++do {								\
++	bpf_raw_spin_lock_irqsave(spinlock_check(lock), flags,policy);	\
++} while (0)
++#define bpf_arch_spin_unlock(l,policy) bpf_queued_spin_unlock(l,policy) 
++static inline void bpf_do_raw_spin_unlock(raw_spinlock_t *lock, int policy) __releases(lock)
++{
++	mmiowb_spin_unlock();
++	bpf_arch_spin_unlock(&lock->raw_lock,policy);
++	__release(lock);
++}
++static inline void bpf___raw_spin_unlock_irqrestore(raw_spinlock_t *lock, 
++					    unsigned long flags, int policy)
++{
++	spin_release(&lock->dep_map, 1, _RET_IP_);
++	bpf_do_raw_spin_unlock(lock,policy);
++	local_irq_restore(flags);
++	preempt_enable();
++}
++static void __lockfunc bpf__raw_spin_unlock_irqrestore(raw_spinlock_t *lock, unsigned long flags, int policy)
++{
++	bpf___raw_spin_unlock_irqrestore(lock, flags,policy);
++}
++#define bpf_raw_spin_unlock_irqrestore(lock, flags, policy)		\
++	do {							\
++		typecheck(unsigned long, flags);		\
++		bpf__raw_spin_unlock_irqrestore(lock, flags,policy);	\
++	} while (0)
++static __always_inline void my_bpf_spin_unlock_irqrestore(spinlock_t *lock, unsigned long flags, int policy)
++{
++	bpf_raw_spin_unlock_irqrestore(&lock->rlock, flags,policy);
++}
++#endif
+\ No newline at end of file
+diff -ruN SynCord-linux-base/kernel/bpf/inode.c SynCord-linux-destination/kernel/bpf/inode.c
+--- SynCord-linux-base/kernel/bpf/inode.c	2023-09-05 13:39:49.112999598 +0000
++++ SynCord-linux-destination/kernel/bpf/inode.c	2023-09-05 13:54:43.098867333 +0000
+@@ -701,3 +701,76 @@
+ 	return ret;
+ }
+ fs_initcall(bpf_init);
++
++#include "kpatch-macros.h"
++#define MAX_POLICY 5
++
++static inline __u64 ptr_to_u64(const void *ptr)
++{
++    return (__u64) (unsigned long) ptr;
++}
++
++static void *get_pinned_bpf_obj(const char *pathname){
++	struct inode *inode;
++	struct path path;
++	void *raw;
++	int ret;
++
++	/* Let's get BPF prog 1 */
++	ret = kern_path(pathname, LOOKUP_FOLLOW, &path);
++	if (ret){
++		printk("[syncord] %s failed\n", pathname);
++		return ERR_PTR(ret);
++	}
++
++	inode = d_backing_inode(path.dentry);
++	ret = inode_permission(inode, ACC_MODE(2));
++	if(ret){
++		printk("[syncord] perm error\n");
++		path_put(&path);
++		return ERR_PTR(ret);
++	}
++
++	raw = bpf_any_get(inode->i_private, BPF_TYPE_PROG);
++	if(!IS_ERR(raw)){
++		touch_atime(&path);
++	}
++	else{
++		printk("[syncord] raw error\n");
++		path_put(&path);
++		return ERR_PTR(ret);
++	}
++
++	path_put(&path);
++	return raw;
++}
++
++static int pre_patch_callback(patch_object *obj)
++{
++	extern int num_policy;
++	extern void *bpf_prog_should_reorder[MAX_POLICY];
++
++	if(num_policy < 4)
++		num_policy++;
++	else
++		return -1;
++
++	bpf_prog_should_reorder[num_policy] = get_pinned_bpf_obj("/sys/fs/bpf/numa-grouping");
++	if(IS_ERR(bpf_prog_should_reorder[num_policy])){
++		printk("[syncord] bpf_policy failed\n");
++		return -1;
++	}
++
++	return 0;
++}
++
++static void post_unpatch_callback(patch_object *obj) {
++	extern int num_policy;
++	extern void *bpf_prog_should_reorder[MAX_POLICY];
++
++	bpf_prog_should_reorder[num_policy] = NULL;
++	num_policy--;
++	klp_shadow_free_all(0, NULL);
++}
++KPATCH_PRE_PATCH_CALLBACK(pre_patch_callback);
++KPATCH_POST_UNPATCH_CALLBACK(post_unpatch_callback);
+diff -ruN SynCord-linux-base/kernel/locking/qspinlock.c SynCord-linux-destination/kernel/locking/qspinlock.c
+--- SynCord-linux-base/kernel/locking/qspinlock.c	2023-09-05 13:52:50.595028326 +0000
++++ SynCord-linux-destination/kernel/locking/qspinlock.c	2023-09-05 13:54:43.098867333 +0000
+@@ -29,6 +29,9 @@
+  * Include queued spinlock statistics code
+  */
+ #include "qspinlock_stat.h"
++#include <linux/lock_policy.h>
++#include <linux/filter.h>
++#include <linux/livepatch.h>
+ 
+ /*
+  * The basic principle of a queue-based spinlock can best be understood
+@@ -172,6 +175,8 @@
+ 
+ #define MAX_POLICY 5
+ int num_policy = 0;
++int num_shuffle = 0;
++int num_notshuffle = 0;
+ void *bpf_prog_lock_to_acquire[MAX_POLICY];
+ void *bpf_prog_lock_acquired[MAX_POLICY];
+ void *bpf_prog_lock_to_release[MAX_POLICY];
+@@ -236,7 +241,15 @@
+ // Reordering APIs
+ static int syncord_should_reorder(struct qspinlock *lock, struct mcs_spinlock *node, struct mcs_spinlock *curr, int policy_id)
+ {
+-	return 0;
++	struct bpf_prog *prog;
++	prog = bpf_prog_should_reorder[policy_id];
++
++	struct lock_policy_args args;
++	args.numa_node = node->nid;
++	args.next_numa_node = curr->nid;
++
++	int ret = BPF_PROG_RUN(prog, &args);
++	return ret;
+ }
+ 
+ static int default_cmp_func(struct qspinlock *lock, struct mcs_spinlock *node, struct mcs_spinlock *curr){
+@@ -1018,7 +1031,7 @@
+ 	if (likely(atomic_try_cmpxchg_acquire(&lock->val, &val, _Q_LOCKED_VAL)))
+ 		return;
+ 
+-	queued_spin_lock_slowpath(lock, val, 0, 0);
++	queued_spin_lock_slowpath(lock, val, 1, 1);
+ }
+ EXPORT_SYMBOL(queued_spin_lock);
+ 
+diff -ruN SynCord-linux-base/mm/compaction.c SynCord-linux-destination/mm/compaction.c
+--- SynCord-linux-base/mm/compaction.c	2023-09-05 13:39:49.112999598 +0000
++++ SynCord-linux-destination/mm/compaction.c	2023-09-05 13:54:57.034843982 +0000
+@@ -24,6 +24,7 @@
+ #include <linux/page_owner.h>
+ #include <linux/psi.h>
+ #include "internal.h"
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #ifdef CONFIG_COMPACTION
+ static inline void count_compact_event(enum vm_event_item item)
+@@ -920,8 +921,10 @@
+ 			if (unlikely(__PageMovable(page)) &&
+ 					!PageIsolated(page)) {
+ 				if (locked) {
+-					spin_unlock_irqrestore(&pgdat->lru_lock,
+-									flags);
++					extern int num_policy;
++					my_bpf_spin_unlock_irqrestore(&pgdat->lru_lock,
++								      flags,
++								      num_policy);
+ 					locked = false;
+ 				}
+ 
+@@ -1017,7 +1020,10 @@
+ 		 */
+ 		if (nr_isolated) {
+ 			if (locked) {
+-				spin_unlock_irqrestore(&pgdat->lru_lock, flags);
++				extern int num_policy;
++				my_bpf_spin_unlock_irqrestore(&pgdat->lru_lock,
++							      flags,
++							      num_policy);
+ 				locked = false;
+ 			}
+ 			putback_movable_pages(&cc->migratepages);
+@@ -1043,8 +1049,11 @@
+ 		low_pfn = end_pfn;
+ 
+ isolate_abort:
+-	if (locked)
+-		spin_unlock_irqrestore(&pgdat->lru_lock, flags);
++	if (locked) {
++		extern int num_policy;
++		my_bpf_spin_unlock_irqrestore(&pgdat->lru_lock, flags,
++					      num_policy);
++	}
+ 
+ 	/*
+ 	 * Updated the cached scanner pfn once the pageblock has been scanned
+diff -ruN SynCord-linux-base/mm/huge_memory.c SynCord-linux-destination/mm/huge_memory.c
+--- SynCord-linux-base/mm/huge_memory.c	2023-09-05 13:39:49.112999598 +0000
++++ SynCord-linux-destination/mm/huge_memory.c	2023-09-05 13:54:46.926860972 +0000
+@@ -33,6 +33,7 @@
+ #include <linux/oom.h>
+ #include <linux/numa.h>
+ #include <linux/page_owner.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <asm/tlb.h>
+ #include <asm/pgalloc.h>
+diff -ruN SynCord-linux-base/mm/swap.c SynCord-linux-destination/mm/swap.c
+--- SynCord-linux-base/mm/swap.c	2023-09-05 13:39:49.112999598 +0000
++++ SynCord-linux-destination/mm/swap.c	2023-09-05 13:54:49.814856146 +0000
+@@ -35,6 +35,7 @@
+ #include <linux/uio.h>
+ #include <linux/hugetlb.h>
+ #include <linux/page_idle.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include "internal.h"
+ 
+@@ -60,16 +61,18 @@
+ static void __page_cache_release(struct page *page)
+ {
+ 	if (PageLRU(page)) {
++		extern int num_policy;
+ 		pg_data_t *pgdat = page_pgdat(page);
+ 		struct lruvec *lruvec;
+ 		unsigned long flags;
+ 
+-		spin_lock_irqsave(&pgdat->lru_lock, flags);
++		my_bpf_spin_lock_irqsave(&pgdat->lru_lock, flags, num_policy);
+ 		lruvec = mem_cgroup_page_lruvec(page, pgdat);
+ 		VM_BUG_ON_PAGE(!PageLRU(page), page);
+ 		__ClearPageLRU(page);
+ 		del_page_from_lru_list(page, lruvec, page_off_lru(page));
+-		spin_unlock_irqrestore(&pgdat->lru_lock, flags);
++		my_bpf_spin_unlock_irqrestore(&pgdat->lru_lock, flags,
++					      num_policy);
+ 	}
+ 	__ClearPageWaiters(page);
+ }
+@@ -201,17 +204,26 @@
+ 		struct pglist_data *pagepgdat = page_pgdat(page);
+ 
+ 		if (pagepgdat != pgdat) {
+-			if (pgdat)
+-				spin_unlock_irqrestore(&pgdat->lru_lock, flags);
++			extern int num_policy;
++			if (pgdat) {
++				extern int num_policy;
++				my_bpf_spin_unlock_irqrestore(&pgdat->lru_lock,
++							      flags,
++							      num_policy);
++			}
+ 			pgdat = pagepgdat;
+-			spin_lock_irqsave(&pgdat->lru_lock, flags);
++			my_bpf_spin_lock_irqsave(&pgdat->lru_lock, flags,
++						 num_policy);
+ 		}
+ 
+ 		lruvec = mem_cgroup_page_lruvec(page, pgdat);
+ 		(*move_fn)(page, lruvec, arg);
+ 	}
+-	if (pgdat)
+-		spin_unlock_irqrestore(&pgdat->lru_lock, flags);
++	if (pgdat) {
++		extern int num_policy;
++		my_bpf_spin_unlock_irqrestore(&pgdat->lru_lock, flags,
++					      num_policy);
++	}
+ 	release_pages(pvec->pages, pvec->nr);
+ 	pagevec_reinit(pvec);
+ }
+@@ -775,7 +787,9 @@
+ 		 * same pgdat. The lock is held only if pgdat != NULL.
+ 		 */
+ 		if (locked_pgdat && ++lock_batch == SWAP_CLUSTER_MAX) {
+-			spin_unlock_irqrestore(&locked_pgdat->lru_lock, flags);
++			extern int num_policy;
++			my_bpf_spin_unlock_irqrestore(&locked_pgdat->lru_lock,
++						      flags, num_policy);
+ 			locked_pgdat = NULL;
+ 		}
+ 
+@@ -784,8 +798,10 @@
+ 
+ 		if (is_zone_device_page(page)) {
+ 			if (locked_pgdat) {
+-				spin_unlock_irqrestore(&locked_pgdat->lru_lock,
+-						       flags);
++				extern int num_policy;
++				my_bpf_spin_unlock_irqrestore(&locked_pgdat->lru_lock,
++							      flags,
++							      num_policy);
+ 				locked_pgdat = NULL;
+ 			}
+ 			/*
+@@ -804,7 +820,10 @@
+ 
+ 		if (PageCompound(page)) {
+ 			if (locked_pgdat) {
+-				spin_unlock_irqrestore(&locked_pgdat->lru_lock, flags);
++				extern int num_policy;
++				my_bpf_spin_unlock_irqrestore(&locked_pgdat->lru_lock,
++							      flags,
++							      num_policy);
+ 				locked_pgdat = NULL;
+ 			}
+ 			__put_compound_page(page);
+@@ -815,12 +834,17 @@
+ 			struct pglist_data *pgdat = page_pgdat(page);
+ 
+ 			if (pgdat != locked_pgdat) {
+-				if (locked_pgdat)
+-					spin_unlock_irqrestore(&locked_pgdat->lru_lock,
+-									flags);
++				extern int num_policy;
++				if (locked_pgdat) {
++					extern int num_policy;
++					my_bpf_spin_unlock_irqrestore(&locked_pgdat->lru_lock,
++								      flags,
++								      num_policy);
++				}
+ 				lock_batch = 0;
+ 				locked_pgdat = pgdat;
+-				spin_lock_irqsave(&locked_pgdat->lru_lock, flags);
++				my_bpf_spin_lock_irqsave(&locked_pgdat->lru_lock,
++							 flags, num_policy);
+ 			}
+ 
+ 			lruvec = mem_cgroup_page_lruvec(page, locked_pgdat);
+@@ -835,8 +859,11 @@
+ 
+ 		list_add(&page->lru, &pages_to_free);
+ 	}
+-	if (locked_pgdat)
+-		spin_unlock_irqrestore(&locked_pgdat->lru_lock, flags);
++	if (locked_pgdat) {
++		extern int num_policy;
++		my_bpf_spin_unlock_irqrestore(&locked_pgdat->lru_lock, flags,
++					      num_policy);
++	}
+ 
+ 	mem_cgroup_uncharge_list(&pages_to_free);
+ 	free_unref_page_list(&pages_to_free);

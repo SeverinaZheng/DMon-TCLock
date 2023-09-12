@@ -1,0 +1,651 @@
+diff -ruN SynCord-linux-base/fs/file.c SynCord-linux-destination/fs/file.c
+--- SynCord-linux-base/fs/file.c	2023-08-29 12:58:43.111004810 +0000
++++ SynCord-linux-destination/fs/file.c	2023-08-29 13:08:57.110657209 +0000
+@@ -18,6 +18,7 @@
+ #include <linux/bitops.h>
+ #include <linux/spinlock.h>
+ #include <linux/rcupdate.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ unsigned int sysctl_nr_open __read_mostly = 1024*1024;
+ unsigned int sysctl_nr_open_min = BITS_PER_LONG;
+@@ -149,9 +150,10 @@
+ 	__releases(files->file_lock)
+ 	__acquires(files->file_lock)
+ {
++	extern int num_policy;
+ 	struct fdtable *new_fdt, *cur_fdt;
+ 
+-	spin_unlock(&files->file_lock);
++	my_bpf_spin_unlock(&files->file_lock, num_policy);
+ 	new_fdt = alloc_fdtable(nr);
+ 
+ 	/* make sure all __fd_install() have seen resize_in_progress
+@@ -160,7 +162,7 @@
+ 	if (atomic_read(&files->count) > 1)
+ 		synchronize_rcu();
+ 
+-	spin_lock(&files->file_lock);
++	my_bpf_spin_lock(&files->file_lock, num_policy);
+ 	if (!new_fdt)
+ 		return -ENOMEM;
+ 	/*
+@@ -209,10 +211,11 @@
+ 		return -EMFILE;
+ 
+ 	if (unlikely(files->resize_in_progress)) {
+-		spin_unlock(&files->file_lock);
++		extern int num_policy;
++		my_bpf_spin_unlock(&files->file_lock, num_policy);
+ 		expanded = 1;
+ 		wait_event(files->resize_wait, !files->resize_in_progress);
+-		spin_lock(&files->file_lock);
++		my_bpf_spin_lock(&files->file_lock, num_policy);
+ 		goto repeat;
+ 	}
+ 
+@@ -271,6 +274,8 @@
+  */
+ struct files_struct *dup_fd(struct files_struct *oldf, int *errorp)
+ {
++	extern int num_policy;
++	extern int num_policy;
+ 	struct files_struct *newf;
+ 	struct file **old_fds, **new_fds;
+ 	unsigned int open_files, i;
+@@ -294,7 +299,7 @@
+ 	new_fdt->full_fds_bits = newf->full_fds_bits_init;
+ 	new_fdt->fd = &newf->fd_array[0];
+ 
+-	spin_lock(&oldf->file_lock);
++	my_bpf_spin_lock(&oldf->file_lock, num_policy);
+ 	old_fdt = files_fdtable(oldf);
+ 	open_files = count_open_files(old_fdt);
+ 
+@@ -302,7 +307,8 @@
+ 	 * Check whether we need to allocate a larger fd array and fd set.
+ 	 */
+ 	while (unlikely(open_files > new_fdt->max_fds)) {
+-		spin_unlock(&oldf->file_lock);
++		extern int num_policy;
++		my_bpf_spin_unlock(&oldf->file_lock, num_policy);
+ 
+ 		if (new_fdt != &newf->fdtab)
+ 			__free_fdtable(new_fdt);
+@@ -325,7 +331,7 @@
+ 		 * who knows it may have a new bigger fd table. We need
+ 		 * the latest pointer.
+ 		 */
+-		spin_lock(&oldf->file_lock);
++		my_bpf_spin_lock(&oldf->file_lock, num_policy);
+ 		old_fdt = files_fdtable(oldf);
+ 		open_files = count_open_files(old_fdt);
+ 	}
+@@ -350,7 +356,7 @@
+ 		}
+ 		rcu_assign_pointer(*new_fds++, f);
+ 	}
+-	spin_unlock(&oldf->file_lock);
++	my_bpf_spin_unlock(&oldf->file_lock, num_policy);
+ 
+ 	/* clear the remainder */
+ 	memset(new_fds, 0, (new_fdt->max_fds - open_files) * sizeof(struct file *));
+@@ -480,11 +486,12 @@
+ int __alloc_fd(struct files_struct *files,
+ 	       unsigned start, unsigned end, unsigned flags)
+ {
++	extern int num_policy;
+ 	unsigned int fd;
+ 	int error;
+ 	struct fdtable *fdt;
+ 
+-	spin_lock(&files->file_lock);
++	my_bpf_spin_lock(&files->file_lock, num_policy);
+ repeat:
+ 	fdt = files_fdtable(files);
+ 	fd = start;
+@@ -531,7 +538,7 @@
+ #endif
+ 
+ out:
+-	spin_unlock(&files->file_lock);
++	my_bpf_spin_unlock(&files->file_lock, num_policy);
+ 	return error;
+ }
+ 
+@@ -556,10 +563,11 @@
+ 
+ void put_unused_fd(unsigned int fd)
+ {
++	extern int num_policy;
+ 	struct files_struct *files = current->files;
+-	spin_lock(&files->file_lock);
++	my_bpf_spin_lock(&files->file_lock, num_policy);
+ 	__put_unused_fd(files, fd);
+-	spin_unlock(&files->file_lock);
++	my_bpf_spin_unlock(&files->file_lock, num_policy);
+ }
+ 
+ EXPORT_SYMBOL(put_unused_fd);
+@@ -592,12 +600,13 @@
+ 	rcu_read_lock_sched();
+ 
+ 	if (unlikely(files->resize_in_progress)) {
++		extern int num_policy;
+ 		rcu_read_unlock_sched();
+-		spin_lock(&files->file_lock);
++		my_bpf_spin_lock(&files->file_lock, num_policy);
+ 		fdt = files_fdtable(files);
+ 		BUG_ON(fdt->fd[fd] != NULL);
+ 		rcu_assign_pointer(fdt->fd[fd], file);
+-		spin_unlock(&files->file_lock);
++		my_bpf_spin_unlock(&files->file_lock, num_policy);
+ 		return;
+ 	}
+ 	/* coupled with smp_wmb() in expand_fdtable() */
+@@ -620,10 +629,11 @@
+  */
+ int __close_fd(struct files_struct *files, unsigned fd)
+ {
++	extern int num_policy;
+ 	struct file *file;
+ 	struct fdtable *fdt;
+ 
+-	spin_lock(&files->file_lock);
++	my_bpf_spin_lock(&files->file_lock, num_policy);
+ 	fdt = files_fdtable(files);
+ 	if (fd >= fdt->max_fds)
+ 		goto out_unlock;
+@@ -632,11 +642,11 @@
+ 		goto out_unlock;
+ 	rcu_assign_pointer(fdt->fd[fd], NULL);
+ 	__put_unused_fd(files, fd);
+-	spin_unlock(&files->file_lock);
++	my_bpf_spin_unlock(&files->file_lock, num_policy);
+ 	return filp_close(file, files);
+ 
+ out_unlock:
+-	spin_unlock(&files->file_lock);
++	my_bpf_spin_unlock(&files->file_lock, num_policy);
+ 	return -EBADF;
+ }
+ EXPORT_SYMBOL(__close_fd); /* for ksys_close() */
+@@ -646,11 +656,12 @@
+  */
+ int __close_fd_get_file(unsigned int fd, struct file **res)
+ {
++	extern int num_policy;
+ 	struct files_struct *files = current->files;
+ 	struct file *file;
+ 	struct fdtable *fdt;
+ 
+-	spin_lock(&files->file_lock);
++	my_bpf_spin_lock(&files->file_lock, num_policy);
+ 	fdt = files_fdtable(files);
+ 	if (fd >= fdt->max_fds)
+ 		goto out_unlock;
+@@ -659,24 +670,26 @@
+ 		goto out_unlock;
+ 	rcu_assign_pointer(fdt->fd[fd], NULL);
+ 	__put_unused_fd(files, fd);
+-	spin_unlock(&files->file_lock);
++	my_bpf_spin_unlock(&files->file_lock, num_policy);
+ 	get_file(file);
+ 	*res = file;
+ 	return filp_close(file, files);
+ 
+ out_unlock:
+-	spin_unlock(&files->file_lock);
++	my_bpf_spin_unlock(&files->file_lock, num_policy);
+ 	*res = NULL;
+ 	return -ENOENT;
+ }
+ 
+ void do_close_on_exec(struct files_struct *files)
+ {
++	extern int num_policy;
++	extern int num_policy;
+ 	unsigned i;
+ 	struct fdtable *fdt;
+ 
+ 	/* exec unshares first */
+-	spin_lock(&files->file_lock);
++	my_bpf_spin_lock(&files->file_lock, num_policy);
+ 	for (i = 0; ; i++) {
+ 		unsigned long set;
+ 		unsigned fd = i * BITS_PER_LONG;
+@@ -688,6 +701,7 @@
+ 			continue;
+ 		fdt->close_on_exec[i] = 0;
+ 		for ( ; set ; fd++, set >>= 1) {
++			extern int num_policy;
+ 			struct file *file;
+ 			if (!(set & 1))
+ 				continue;
+@@ -696,14 +710,14 @@
+ 				continue;
+ 			rcu_assign_pointer(fdt->fd[fd], NULL);
+ 			__put_unused_fd(files, fd);
+-			spin_unlock(&files->file_lock);
++			my_bpf_spin_unlock(&files->file_lock, num_policy);
+ 			filp_close(file, files);
+ 			cond_resched();
+-			spin_lock(&files->file_lock);
++			my_bpf_spin_lock(&files->file_lock, num_policy);
+ 		}
+ 
+ 	}
+-	spin_unlock(&files->file_lock);
++	my_bpf_spin_unlock(&files->file_lock, num_policy);
+ }
+ 
+ static struct file *__fget(unsigned int fd, fmode_t mask, unsigned int refs)
+@@ -817,15 +831,16 @@
+ 
+ void set_close_on_exec(unsigned int fd, int flag)
+ {
++	extern int num_policy;
+ 	struct files_struct *files = current->files;
+ 	struct fdtable *fdt;
+-	spin_lock(&files->file_lock);
++	my_bpf_spin_lock(&files->file_lock, num_policy);
+ 	fdt = files_fdtable(files);
+ 	if (flag)
+ 		__set_close_on_exec(fd, fdt);
+ 	else
+ 		__clear_close_on_exec(fd, fdt);
+-	spin_unlock(&files->file_lock);
++	my_bpf_spin_unlock(&files->file_lock, num_policy);
+ }
+ 
+ bool get_close_on_exec(unsigned int fd)
+@@ -844,6 +859,7 @@
+ 	struct file *file, unsigned fd, unsigned flags)
+ __releases(&files->file_lock)
+ {
++	extern int num_policy;
+ 	struct file *tofree;
+ 	struct fdtable *fdt;
+ 
+@@ -872,7 +888,7 @@
+ 		__set_close_on_exec(fd, fdt);
+ 	else
+ 		__clear_close_on_exec(fd, fdt);
+-	spin_unlock(&files->file_lock);
++	my_bpf_spin_unlock(&files->file_lock, num_policy);
+ 
+ 	if (tofree)
+ 		filp_close(tofree, files);
+@@ -880,12 +896,13 @@
+ 	return fd;
+ 
+ Ebusy:
+-	spin_unlock(&files->file_lock);
++	my_bpf_spin_unlock(&files->file_lock, num_policy);
+ 	return -EBUSY;
+ }
+ 
+ int replace_fd(unsigned fd, struct file *file, unsigned flags)
+ {
++	extern int num_policy;
+ 	int err;
+ 	struct files_struct *files = current->files;
+ 
+@@ -895,7 +912,7 @@
+ 	if (fd >= rlimit(RLIMIT_NOFILE))
+ 		return -EBADF;
+ 
+-	spin_lock(&files->file_lock);
++	my_bpf_spin_lock(&files->file_lock, num_policy);
+ 	err = expand_files(files, fd);
+ 	if (unlikely(err < 0))
+ 		goto out_unlock;
+@@ -908,6 +925,7 @@
+ 
+ static int ksys_dup3(unsigned int oldfd, unsigned int newfd, int flags)
+ {
++	extern int num_policy;
+ 	int err = -EBADF;
+ 	struct file *file;
+ 	struct files_struct *files = current->files;
+@@ -921,7 +939,7 @@
+ 	if (newfd >= rlimit(RLIMIT_NOFILE))
+ 		return -EBADF;
+ 
+-	spin_lock(&files->file_lock);
++	my_bpf_spin_lock(&files->file_lock, num_policy);
+ 	err = expand_files(files, newfd);
+ 	file = fcheck(oldfd);
+ 	if (unlikely(!file))
+@@ -997,11 +1015,12 @@
+ 		int (*f)(const void *, struct file *, unsigned),
+ 		const void *p)
+ {
++	extern int num_policy;
+ 	struct fdtable *fdt;
+ 	int res = 0;
+ 	if (!files)
+ 		return 0;
+-	spin_lock(&files->file_lock);
++	my_bpf_spin_lock(&files->file_lock, num_policy);
+ 	for (fdt = files_fdtable(files); n < fdt->max_fds; n++) {
+ 		struct file *file;
+ 		file = rcu_dereference_check_fdtable(files, fdt->fd[n]);
+@@ -1011,7 +1030,7 @@
+ 		if (res)
+ 			break;
+ 	}
+-	spin_unlock(&files->file_lock);
++	my_bpf_spin_unlock(&files->file_lock, num_policy);
+ 	return res;
+ }
+ EXPORT_SYMBOL(iterate_fd);
+diff -ruN SynCord-linux-base/fs/locks.c SynCord-linux-destination/fs/locks.c
+--- SynCord-linux-base/fs/locks.c	2023-08-29 12:58:43.111004810 +0000
++++ SynCord-linux-destination/fs/locks.c	2023-08-29 13:08:56.854657318 +0000
+@@ -168,6 +168,7 @@
+ #include <linux/pid_namespace.h>
+ #include <linux/hashtable.h>
+ #include <linux/percpu.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #define CREATE_TRACE_POINTS
+ #include <trace/events/filelock.h>
+@@ -2504,14 +2505,15 @@
+ 	 */
+ 	if (!error && file_lock->fl_type != F_UNLCK &&
+ 	    !(file_lock->fl_flags & FL_OFDLCK)) {
++		extern int num_policy;
+ 		/*
+ 		 * We need that spin_lock here - it prevents reordering between
+ 		 * update of i_flctx->flc_posix and check for it done in
+ 		 * close(). rcu_read_lock() wouldn't do.
+ 		 */
+-		spin_lock(&current->files->file_lock);
++		my_bpf_spin_lock(&current->files->file_lock, num_policy);
+ 		f = fcheck(fd);
+-		spin_unlock(&current->files->file_lock);
++		my_bpf_spin_unlock(&current->files->file_lock, num_policy);
+ 		if (f != filp) {
+ 			file_lock->fl_type = F_UNLCK;
+ 			error = do_lock_file_wait(filp, cmd, file_lock);
+@@ -2635,14 +2637,15 @@
+ 	 */
+ 	if (!error && file_lock->fl_type != F_UNLCK &&
+ 	    !(file_lock->fl_flags & FL_OFDLCK)) {
++		extern int num_policy;
+ 		/*
+ 		 * We need that spin_lock here - it prevents reordering between
+ 		 * update of i_flctx->flc_posix and check for it done in
+ 		 * close(). rcu_read_lock() wouldn't do.
+ 		 */
+-		spin_lock(&current->files->file_lock);
++		my_bpf_spin_lock(&current->files->file_lock, num_policy);
+ 		f = fcheck(fd);
+-		spin_unlock(&current->files->file_lock);
++		my_bpf_spin_unlock(&current->files->file_lock, num_policy);
+ 		if (f != filp) {
+ 			file_lock->fl_type = F_UNLCK;
+ 			error = do_lock_file_wait(filp, cmd, file_lock);
+diff -ruN SynCord-linux-base/fs/proc/fd.c SynCord-linux-destination/fs/proc/fd.c
+--- SynCord-linux-base/fs/proc/fd.c	2023-08-29 12:58:43.111004810 +0000
++++ SynCord-linux-destination/fs/proc/fd.c	2023-08-29 13:08:57.086657218 +0000
+@@ -10,6 +10,7 @@
+ #include <linux/file.h>
+ #include <linux/seq_file.h>
+ #include <linux/fs.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <linux/proc_fs.h>
+ 
+@@ -32,9 +33,10 @@
+ 	put_task_struct(task);
+ 
+ 	if (files) {
++		extern int num_policy;
+ 		unsigned int fd = proc_fd(m->private);
+ 
+-		spin_lock(&files->file_lock);
++		my_bpf_spin_lock(&files->file_lock, num_policy);
+ 		file = fcheck_files(files, fd);
+ 		if (file) {
+ 			struct fdtable *fdt = files_fdtable(files);
+@@ -46,7 +48,7 @@
+ 			get_file(file);
+ 			ret = 0;
+ 		}
+-		spin_unlock(&files->file_lock);
++		my_bpf_spin_unlock(&files->file_lock, num_policy);
+ 		put_files_struct(files);
+ 	}
+ 
+@@ -157,17 +159,18 @@
+ 	}
+ 
+ 	if (files) {
++		extern int num_policy;
+ 		unsigned int fd = proc_fd(d_inode(dentry));
+ 		struct file *fd_file;
+ 
+-		spin_lock(&files->file_lock);
++		my_bpf_spin_lock(&files->file_lock, num_policy);
+ 		fd_file = fcheck_files(files, fd);
+ 		if (fd_file) {
+ 			*path = fd_file->f_path;
+ 			path_get(&fd_file->f_path);
+ 			ret = 0;
+ 		}
+-		spin_unlock(&files->file_lock);
++		my_bpf_spin_unlock(&files->file_lock, num_policy);
+ 		put_files_struct(files);
+ 	}
+ 
+diff -ruN SynCord-linux-base/include/linux/my_bpf_spin_lock.h SynCord-linux-destination/include/linux/my_bpf_spin_lock.h
+--- SynCord-linux-base/include/linux/my_bpf_spin_lock.h	1970-01-01 00:00:00.000000000 +0000
++++ SynCord-linux-destination/include/linux/my_bpf_spin_lock.h	2023-08-29 13:09:39.562639488 +0000
+@@ -0,0 +1,41 @@
++#ifndef MY_BPF_SPIN_H
++#define MY_BPF_SPIN_H
++#define bpf_arch_spin_lock(l,policy) bpf_queued_spin_lock(l,policy) 
++static inline void bpf_do_raw_spin_lock(raw_spinlock_t *lock, int policy) __acquires(lock)
++{
++	__acquire(lock);
++	bpf_arch_spin_lock(&lock->raw_lock,policy);
++	mmiowb_spin_lock();
++}
++static inline void bpf___raw_spin_lock(raw_spinlock_t *lock, int policy)
++{
++	preempt_disable();
++	spin_acquire(&lock->dep_map, 0, 0, _RET_IP_);
++	bpf_do_raw_spin_lock(lock,policy);
++}
++#define bpf__raw_spin_lock(lock,policy) bpf___raw_spin_lock(lock,policy) 
++#define bpf_raw_spin_lock(lock,policy) bpf__raw_spin_lock(lock,policy) 
++static __always_inline void my_bpf_spin_lock(spinlock_t *lock, int policy)
++{
++	bpf_raw_spin_lock(&lock->rlock,policy);
++}
++#define bpf_arch_spin_unlock(l,policy) bpf_queued_spin_unlock(l,policy) 
++static inline void bpf_do_raw_spin_unlock(raw_spinlock_t *lock, int policy) __releases(lock)
++{
++	mmiowb_spin_unlock();
++	bpf_arch_spin_unlock(&lock->raw_lock,policy);
++	__release(lock);
++}
++static inline void bpf___raw_spin_unlock(raw_spinlock_t *lock, int policy)
++{
++	spin_release(&lock->dep_map, 1, _RET_IP_);
++	bpf_do_raw_spin_unlock(lock,policy);
++	preempt_enable();
++}
++#define bpf__raw_spin_unlock(lock,policy) bpf___raw_spin_unlock(lock,policy) 
++#define bpf_raw_spin_unlock(lock,policy) bpf__raw_spin_unlock(lock,policy) 
++static __always_inline void my_bpf_spin_unlock(spinlock_t *lock, int policy)
++{
++	bpf_raw_spin_unlock(&lock->rlock,policy);
++}
++#endif
+\ No newline at end of file
+diff -ruN SynCord-linux-base/kernel/bpf/inode.c SynCord-linux-destination/kernel/bpf/inode.c
+--- SynCord-linux-base/kernel/bpf/inode.c	2023-08-29 12:58:43.111004810 +0000
++++ SynCord-linux-destination/kernel/bpf/inode.c	2023-08-29 13:07:55.962683691 +0000
+@@ -701,3 +701,76 @@
+ 	return ret;
+ }
+ fs_initcall(bpf_init);
++
++#include "kpatch-macros.h"
++#define MAX_POLICY 5
++
++static inline __u64 ptr_to_u64(const void *ptr)
++{
++    return (__u64) (unsigned long) ptr;
++}
++
++static void *get_pinned_bpf_obj(const char *pathname){
++	struct inode *inode;
++	struct path path;
++	void *raw;
++	int ret;
++
++	/* Let's get BPF prog 1 */
++	ret = kern_path(pathname, LOOKUP_FOLLOW, &path);
++	if (ret){
++		printk("[syncord] %s failed\n", pathname);
++		return ERR_PTR(ret);
++	}
++
++	inode = d_backing_inode(path.dentry);
++	ret = inode_permission(inode, ACC_MODE(2));
++	if(ret){
++		printk("[syncord] perm error\n");
++		path_put(&path);
++		return ERR_PTR(ret);
++	}
++
++	raw = bpf_any_get(inode->i_private, BPF_TYPE_PROG);
++	if(!IS_ERR(raw)){
++		touch_atime(&path);
++	}
++	else{
++		printk("[syncord] raw error\n");
++		path_put(&path);
++		return ERR_PTR(ret);
++	}
++
++	path_put(&path);
++	return raw;
++}
++
++static int pre_patch_callback(patch_object *obj)
++{
++	extern int num_policy;
++	extern void *bpf_prog_should_reorder[MAX_POLICY];
++
++	if(num_policy < 4)
++		num_policy++;
++	else
++		return -1;
++
++	bpf_prog_should_reorder[num_policy] = get_pinned_bpf_obj("/sys/fs/bpf/numa-grouping");
++	if(IS_ERR(bpf_prog_should_reorder[num_policy])){
++		printk("[syncord] bpf_policy failed\n");
++		return -1;
++	}
++
++	return 0;
++}
++
++static void post_unpatch_callback(patch_object *obj) {
++	extern int num_policy;
++	extern void *bpf_prog_should_reorder[MAX_POLICY];
++
++	bpf_prog_should_reorder[num_policy] = NULL;
++	num_policy--;
++	klp_shadow_free_all(0, NULL);
++}
++KPATCH_PRE_PATCH_CALLBACK(pre_patch_callback);
++KPATCH_POST_UNPATCH_CALLBACK(post_unpatch_callback);
+diff -ruN SynCord-linux-base/kernel/kcmp.c SynCord-linux-destination/kernel/kcmp.c
+--- SynCord-linux-base/kernel/kcmp.c	2023-08-29 12:58:43.111004810 +0000
++++ SynCord-linux-destination/kernel/kcmp.c	2023-08-29 13:09:17.670648562 +0000
+@@ -16,6 +16,7 @@
+ #include <linux/list.h>
+ #include <linux/eventpoll.h>
+ #include <linux/file.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <asm/unistd.h>
+ 
+@@ -105,6 +106,7 @@
+ 			     unsigned long idx1,
+ 			     struct kcmp_epoll_slot __user *uslot)
+ {
++	extern int num_policy;
+ 	struct file *filp, *filp_epoll, *filp_tgt;
+ 	struct kcmp_epoll_slot slot;
+ 	struct files_struct *files;
+@@ -120,13 +122,13 @@
+ 	if (!files)
+ 		return -EBADF;
+ 
+-	spin_lock(&files->file_lock);
++	my_bpf_spin_lock(&files->file_lock, num_policy);
+ 	filp_epoll = fcheck_files(files, slot.efd);
+ 	if (filp_epoll)
+ 		get_file(filp_epoll);
+ 	else
+ 		filp_tgt = ERR_PTR(-EBADF);
+-	spin_unlock(&files->file_lock);
++	my_bpf_spin_unlock(&files->file_lock, num_policy);
+ 	put_files_struct(files);
+ 
+ 	if (filp_epoll) {
+diff -ruN SynCord-linux-base/kernel/locking/qspinlock.c SynCord-linux-destination/kernel/locking/qspinlock.c
+--- SynCord-linux-base/kernel/locking/qspinlock.c	2023-08-29 12:58:43.111004810 +0000
++++ SynCord-linux-destination/kernel/locking/qspinlock.c	2023-08-29 13:07:55.962683691 +0000
+@@ -29,6 +29,9 @@
+  * Include queued spinlock statistics code
+  */
+ #include "qspinlock_stat.h"
++#include <linux/lock_policy.h>
++#include <linux/filter.h>
++#include <linux/livepatch.h>
+ 
+ /*
+  * The basic principle of a queue-based spinlock can best be understood
+@@ -172,6 +175,8 @@
+ 
+ #define MAX_POLICY 5
+ int num_policy = 0;
++int num_shuffle = 0;
++int num_notshuffle = 0;
+ void *bpf_prog_lock_to_acquire[MAX_POLICY];
+ void *bpf_prog_lock_acquired[MAX_POLICY];
+ void *bpf_prog_lock_to_release[MAX_POLICY];
+@@ -236,7 +241,15 @@
+ // Reordering APIs
+ static int syncord_should_reorder(struct qspinlock *lock, struct mcs_spinlock *node, struct mcs_spinlock *curr, int policy_id)
+ {
+-	return 0;
++	struct bpf_prog *prog;
++	prog = bpf_prog_should_reorder[policy_id];
++
++	struct lock_policy_args args;
++	args.numa_node = node->nid;
++	args.next_numa_node = curr->nid;
++
++	int ret = BPF_PROG_RUN(prog, &args);
++	return ret;
+ }
+ 
+ static int default_cmp_func(struct qspinlock *lock, struct mcs_spinlock *node, struct mcs_spinlock *curr){
+@@ -1018,7 +1031,7 @@
+ 	if (likely(atomic_try_cmpxchg_acquire(&lock->val, &val, _Q_LOCKED_VAL)))
+ 		return;
+ 
+-	queued_spin_lock_slowpath(lock, val, 0, 0);
++	queued_spin_lock_slowpath(lock, val, 1, 1);
+ }
+ EXPORT_SYMBOL(queued_spin_lock);
+ 

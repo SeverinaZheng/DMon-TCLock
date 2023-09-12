@@ -1,0 +1,4083 @@
+diff -ruN SynCord-linux-base/fs/affs/amigaffs.c SynCord-linux-destination/fs/affs/amigaffs.c
+--- SynCord-linux-base/fs/affs/amigaffs.c	2023-09-04 14:55:43.167293010 +0000
++++ SynCord-linux-destination/fs/affs/amigaffs.c	2023-09-06 09:33:03.266505321 +0000
+@@ -12,6 +12,7 @@
+ #include <linux/math64.h>
+ #include <linux/iversion.h>
+ #include "affs.h"
++#include <linux/my_bpf_spin_lock.h>
+ 
+ /*
+  * Functions for accessing Amiga-FFS structures.
+@@ -124,15 +125,16 @@
+ static void
+ affs_fix_dcache(struct inode *inode, u32 entry_ino)
+ {
++	extern int num_policy;
+ 	struct dentry *dentry;
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	hlist_for_each_entry(dentry, &inode->i_dentry, d_u.d_alias) {
+ 		if (entry_ino == (u32)(long)dentry->d_fsdata) {
+ 			dentry->d_fsdata = (void *)inode->i_ino;
+ 			break;
+ 		}
+ 	}
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ }
+ 
+ 
+diff -ruN SynCord-linux-base/fs/afs/dir.c SynCord-linux-destination/fs/afs/dir.c
+--- SynCord-linux-base/fs/afs/dir.c	2023-09-04 14:55:43.167293010 +0000
++++ SynCord-linux-destination/fs/afs/dir.c	2023-09-06 09:33:01.950499982 +0000
+@@ -16,6 +16,7 @@
+ #include "internal.h"
+ #include "afs_fs.h"
+ #include "xdr_fs.h"
++#include <linux/my_bpf_spin_lock.h>
+ 
+ static struct dentry *afs_lookup(struct inode *dir, struct dentry *dentry,
+ 				 unsigned int flags);
+@@ -1947,10 +1948,11 @@
+ 
+ 		new_inode = d_inode(new_dentry);
+ 		if (new_inode) {
+-			spin_lock(&new_inode->i_lock);
++			extern int num_policy;
++			my_bpf_spin_lock(&new_inode->i_lock, num_policy);
+ 			if (new_inode->i_nlink > 0)
+ 				drop_nlink(new_inode);
+-			spin_unlock(&new_inode->i_lock);
++			my_bpf_spin_unlock(&new_inode->i_lock, num_policy);
+ 		}
+ 
+ 		/* Now we can update d_fsdata on the dentries to reflect their
+diff -ruN SynCord-linux-base/fs/block_dev.c SynCord-linux-destination/fs/block_dev.c
+--- SynCord-linux-base/fs/block_dev.c	2023-09-04 14:55:43.167293010 +0000
++++ SynCord-linux-destination/fs/block_dev.c	2023-09-06 09:33:00.218493002 +0000
+@@ -35,6 +35,7 @@
+ #include <linux/falloc.h>
+ #include <linux/uaccess.h>
+ #include "internal.h"
++#include <linux/my_bpf_spin_lock.h>
+ 
+ struct bdev_inode {
+ 	struct block_device bdev;
+@@ -56,12 +57,15 @@
+ 
+ static void bdev_write_inode(struct block_device *bdev)
+ {
++	extern int num_policy;
++	extern int num_policy;
+ 	struct inode *inode = bdev->bd_inode;
+ 	int ret;
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	while (inode->i_state & I_DIRTY) {
+-		spin_unlock(&inode->i_lock);
++		extern int num_policy;
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		ret = write_inode_now(inode, true);
+ 		if (ret) {
+ 			char name[BDEVNAME_SIZE];
+@@ -69,9 +73,9 @@
+ 					    "for block device %s (err=%d).\n",
+ 					    bdevname(bdev, name), ret);
+ 		}
+-		spin_lock(&inode->i_lock);
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	}
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ }
+ 
+ /* Kill _all_ buffers and pagecache , dirty or not.. */
+@@ -2212,17 +2216,18 @@
+ 
+ 	spin_lock(&blockdev_superblock->s_inode_list_lock);
+ 	list_for_each_entry(inode, &blockdev_superblock->s_inodes, i_sb_list) {
++		extern int num_policy;
+ 		struct address_space *mapping = inode->i_mapping;
+ 		struct block_device *bdev;
+ 
+-		spin_lock(&inode->i_lock);
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		if (inode->i_state & (I_FREEING|I_WILL_FREE|I_NEW) ||
+ 		    mapping->nrpages == 0) {
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			continue;
+ 		}
+ 		__iget(inode);
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		spin_unlock(&blockdev_superblock->s_inode_list_lock);
+ 		/*
+ 		 * We hold a reference to 'inode' so it couldn't have been
+diff -ruN SynCord-linux-base/fs/cifs/cifssmb.c SynCord-linux-destination/fs/cifs/cifssmb.c
+--- SynCord-linux-base/fs/cifs/cifssmb.c	2023-09-04 14:55:43.167293010 +0000
++++ SynCord-linux-destination/fs/cifs/cifssmb.c	2023-09-06 09:33:02.198500986 +0000
+@@ -44,6 +44,7 @@
+ #include "cifs_debug.h"
+ #include "fscache.h"
+ #include "smbdirect.h"
++#include <linux/my_bpf_spin_lock.h>
+ #ifdef CONFIG_CIFS_DFS_UPCALL
+ #include "dfs_cache.h"
+ #endif
+@@ -2167,9 +2168,10 @@
+ 	int i = 0;
+ 
+ 	if (wdata->result == 0) {
+-		spin_lock(&inode->i_lock);
++		extern int num_policy;
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		cifs_update_eof(CIFS_I(inode), wdata->offset, wdata->bytes);
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		cifs_stats_bytes_written(tlink_tcon(wdata->cfile->tlink),
+ 					 wdata->bytes);
+ 	} else if (wdata->sync_mode == WB_SYNC_ALL && wdata->result == -EAGAIN)
+diff -ruN SynCord-linux-base/fs/cifs/file.c SynCord-linux-destination/fs/cifs/file.c
+--- SynCord-linux-base/fs/cifs/file.c	2023-09-04 14:55:43.167293010 +0000
++++ SynCord-linux-destination/fs/cifs/file.c	2023-09-06 09:33:02.210501035 +0000
+@@ -44,6 +44,7 @@
+ #include "cifs_fs_sb.h"
+ #include "fscache.h"
+ #include "smbdirect.h"
++#include <linux/my_bpf_spin_lock.h>
+ 
+ static inline int cifs_convert_flags(unsigned int flags)
+ {
+@@ -1828,9 +1829,11 @@
+ 				return rc;
+ 			}
+ 		} else {
+-			spin_lock(&d_inode(dentry)->i_lock);
++			extern int num_policy;
++			my_bpf_spin_lock(&d_inode(dentry)->i_lock, num_policy);
+ 			cifs_update_eof(cifsi, *offset, bytes_written);
+-			spin_unlock(&d_inode(dentry)->i_lock);
++			my_bpf_spin_unlock(&d_inode(dentry)->i_lock,
++					   num_policy);
+ 			*offset += bytes_written;
+ 		}
+ 	}
+@@ -1838,10 +1841,11 @@
+ 	cifs_stats_bytes_written(tcon, total_written);
+ 
+ 	if (total_written > 0) {
+-		spin_lock(&d_inode(dentry)->i_lock);
++		extern int num_policy;
++		my_bpf_spin_lock(&d_inode(dentry)->i_lock, num_policy);
+ 		if (*offset > d_inode(dentry)->i_size)
+ 			i_size_write(d_inode(dentry), *offset);
+-		spin_unlock(&d_inode(dentry)->i_lock);
++		my_bpf_spin_unlock(&d_inode(dentry)->i_lock, num_policy);
+ 	}
+ 	mark_inode_dirty_sync(d_inode(dentry));
+ 	free_xid(xid);
+@@ -2495,10 +2499,11 @@
+ 	}
+ 
+ 	if (rc > 0) {
+-		spin_lock(&inode->i_lock);
++		extern int num_policy;
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		if (pos > inode->i_size)
+ 			i_size_write(inode, pos);
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	}
+ 
+ 	unlock_page(page);
+@@ -2655,16 +2660,17 @@
+ static void
+ cifs_uncached_writev_complete(struct work_struct *work)
+ {
++	extern int num_policy;
+ 	struct cifs_writedata *wdata = container_of(work,
+ 					struct cifs_writedata, work);
+ 	struct inode *inode = d_inode(wdata->cfile->dentry);
+ 	struct cifsInodeInfo *cifsi = CIFS_I(inode);
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	cifs_update_eof(cifsi, wdata->offset, wdata->bytes);
+ 	if (cifsi->server_eof > inode->i_size)
+ 		i_size_write(inode, cifsi->server_eof);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 
+ 	complete(&wdata->done);
+ 	collect_uncached_write_data(wdata->ctx);
+diff -ruN SynCord-linux-base/fs/cifs/inode.c SynCord-linux-destination/fs/cifs/inode.c
+--- SynCord-linux-base/fs/cifs/inode.c	2023-09-04 14:55:43.171293004 +0000
++++ SynCord-linux-destination/fs/cifs/inode.c	2023-09-06 09:33:01.614498626 +0000
+@@ -25,6 +25,7 @@
+ #include <linux/freezer.h>
+ #include <linux/sched/signal.h>
+ #include <linux/wait_bit.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <asm/div64.h>
+ #include "cifsfs.h"
+@@ -156,12 +157,13 @@
+ void
+ cifs_fattr_to_inode(struct inode *inode, struct cifs_fattr *fattr)
+ {
++	extern int num_policy;
+ 	struct cifsInodeInfo *cifs_i = CIFS_I(inode);
+ 	struct cifs_sb_info *cifs_sb = CIFS_SB(inode->i_sb);
+ 
+ 	cifs_revalidate_cache(inode, fattr);
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	/* we do not want atime to be less than mtime, it broke some apps */
+ 	if (timespec64_compare(&fattr->cf_atime, &fattr->cf_mtime))
+ 		inode->i_atime = fattr->cf_mtime;
+@@ -206,7 +208,7 @@
+ 		 */
+ 		inode->i_blocks = (512 - 1 + fattr->cf_bytes) >> 9;
+ 	}
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 
+ 	if (fattr->cf_flags & CIFS_FATTR_DFS_REFERRAL)
+ 		inode->i_flags |= S_AUTOMOUNT;
+@@ -1006,16 +1008,17 @@
+ static bool
+ inode_has_hashed_dentries(struct inode *inode)
+ {
++	extern int num_policy;
+ 	struct dentry *dentry;
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	hlist_for_each_entry(dentry, &inode->i_dentry, d_u.d_alias) {
+ 		if (!d_unhashed(dentry) || IS_ROOT(dentry)) {
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			return true;
+ 		}
+ 	}
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	return false;
+ }
+ 
+@@ -1112,15 +1115,16 @@
+ #endif
+ 
+ 	if (rc && tcon->pipe) {
++		extern int num_policy;
+ 		cifs_dbg(FYI, "ipc connection - fake read inode\n");
+-		spin_lock(&inode->i_lock);
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		inode->i_mode |= S_IFDIR;
+ 		set_nlink(inode, 2);
+ 		inode->i_op = &cifs_ipc_inode_ops;
+ 		inode->i_fop = &simple_dir_operations;
+ 		inode->i_uid = cifs_sb->mnt_uid;
+ 		inode->i_gid = cifs_sb->mnt_gid;
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	} else if (rc) {
+ 		iget_failed(inode);
+ 		inode = ERR_PTR(rc);
+@@ -1318,10 +1322,11 @@
+ static void
+ cifs_drop_nlink(struct inode *inode)
+ {
+-	spin_lock(&inode->i_lock);
++	extern int num_policy;
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	if (inode->i_nlink > 0)
+ 		drop_nlink(inode);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ }
+ 
+ /*
+@@ -1688,10 +1693,11 @@
+ 	cifs_put_tlink(tlink);
+ 
+ 	if (!rc) {
+-		spin_lock(&d_inode(direntry)->i_lock);
++		extern int num_policy;
++		my_bpf_spin_lock(&d_inode(direntry)->i_lock, num_policy);
+ 		i_size_write(d_inode(direntry), 0);
+ 		clear_nlink(d_inode(direntry));
+-		spin_unlock(&d_inode(direntry)->i_lock);
++		my_bpf_spin_unlock(&d_inode(direntry)->i_lock, num_policy);
+ 	}
+ 
+ 	cifsInode = CIFS_I(d_inode(direntry));
+@@ -2184,11 +2190,12 @@
+ 
+ static void cifs_setsize(struct inode *inode, loff_t offset)
+ {
++	extern int num_policy;
+ 	struct cifsInodeInfo *cifs_i = CIFS_I(inode);
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	i_size_write(inode, offset);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 
+ 	/* Cached inode must be refreshed on truncate */
+ 	cifs_i->time = 0;
+diff -ruN SynCord-linux-base/fs/cifs/link.c SynCord-linux-destination/fs/cifs/link.c
+--- SynCord-linux-base/fs/cifs/link.c	2023-09-04 14:55:43.171293004 +0000
++++ SynCord-linux-destination/fs/cifs/link.c	2023-09-06 09:33:01.466498028 +0000
+@@ -567,9 +567,12 @@
+ 	if (d_really_is_positive(old_file)) {
+ 		cifsInode = CIFS_I(d_inode(old_file));
+ 		if (rc == 0) {
+-			spin_lock(&d_inode(old_file)->i_lock);
++			extern int num_policy;
++			my_bpf_spin_lock(&d_inode(old_file)->i_lock,
++					 num_policy);
+ 			inc_nlink(d_inode(old_file));
+-			spin_unlock(&d_inode(old_file)->i_lock);
++			my_bpf_spin_unlock(&d_inode(old_file)->i_lock,
++					   num_policy);
+ 
+ 			/*
+ 			 * parent dir timestamps will update from srv within a
+diff -ruN SynCord-linux-base/fs/crypto/keyring.c SynCord-linux-destination/fs/crypto/keyring.c
+--- SynCord-linux-base/fs/crypto/keyring.c	2023-09-04 14:55:43.171293004 +0000
++++ SynCord-linux-destination/fs/crypto/keyring.c	2023-09-06 09:33:01.966500046 +0000
+@@ -21,6 +21,7 @@
+ #include <crypto/skcipher.h>
+ #include <linux/key-type.h>
+ #include <linux/seq_file.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include "fscrypt_private.h"
+ 
+@@ -637,14 +638,15 @@
+ 	spin_lock(&mk->mk_decrypted_inodes_lock);
+ 
+ 	list_for_each_entry(ci, &mk->mk_decrypted_inodes, ci_master_key_link) {
++		extern int num_policy;
+ 		inode = ci->ci_inode;
+-		spin_lock(&inode->i_lock);
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		if (inode->i_state & (I_FREEING | I_WILL_FREE | I_NEW)) {
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			continue;
+ 		}
+ 		__iget(inode);
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		spin_unlock(&mk->mk_decrypted_inodes_lock);
+ 
+ 		shrink_dcache_inode(inode);
+diff -ruN SynCord-linux-base/fs/dcache.c SynCord-linux-destination/fs/dcache.c
+--- SynCord-linux-base/fs/dcache.c	2023-09-04 14:55:43.171293004 +0000
++++ SynCord-linux-destination/fs/dcache.c	2023-09-06 09:33:00.630494659 +0000
+@@ -34,6 +34,7 @@
+ #include <linux/list_lru.h>
+ #include "internal.h"
+ #include "mount.h"
++#include <linux/my_bpf_spin_lock.h>
+ 
+ /*
+  * Usage:
+@@ -358,6 +359,7 @@
+ 	__releases(dentry->d_lock)
+ 	__releases(dentry->d_inode->i_lock)
+ {
++	extern int num_policy;
+ 	struct inode *inode = dentry->d_inode;
+ 
+ 	raw_write_seqcount_begin(&dentry->d_seq);
+@@ -365,7 +367,7 @@
+ 	hlist_del_init(&dentry->d_u.d_alias);
+ 	raw_write_seqcount_end(&dentry->d_seq);
+ 	spin_unlock(&dentry->d_lock);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	if (!inode->i_nlink)
+ 		fsnotify_inoderemove(inode);
+ 	if (dentry->d_op && dentry->d_op->d_iput)
+@@ -959,11 +961,12 @@
+  */
+ struct dentry *d_find_any_alias(struct inode *inode)
+ {
++	extern int num_policy;
+ 	struct dentry *de;
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	de = __d_find_any_alias(inode);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	return de;
+ }
+ EXPORT_SYMBOL(d_find_any_alias);
+@@ -1006,9 +1009,10 @@
+ 	struct dentry *de = NULL;
+ 
+ 	if (!hlist_empty(&inode->i_dentry)) {
+-		spin_lock(&inode->i_lock);
++		extern int num_policy;
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		de = __d_find_alias(inode);
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	}
+ 	return de;
+ }
+@@ -1020,6 +1024,7 @@
+  */
+ void d_prune_aliases(struct inode *inode)
+ {
++	extern int num_policy;
+ 	struct dentry *dentry;
+ restart:
+ 	spin_lock(&inode->i_lock);
+@@ -1037,7 +1042,7 @@
+ 		}
+ 		spin_unlock(&dentry->d_lock);
+ 	}
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ }
+ EXPORT_SYMBOL(d_prune_aliases);
+ 
+@@ -1062,8 +1067,9 @@
+ 
+ 	inode = dentry->d_inode;
+ 	if (inode && unlikely(!spin_trylock(&inode->i_lock))) {
++		extern int num_policy;
+ 		spin_unlock(&dentry->d_lock);
+-		spin_lock(&inode->i_lock);
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		spin_lock(&dentry->d_lock);
+ 		if (unlikely(dentry->d_lockref.count))
+ 			goto out;
+@@ -1949,10 +1955,11 @@
+ {
+ 	BUG_ON(!hlist_unhashed(&entry->d_u.d_alias));
+ 	if (inode) {
++		extern int num_policy;
+ 		security_d_instantiate(entry, inode);
+-		spin_lock(&inode->i_lock);
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		__d_instantiate(entry, inode);
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	}
+ }
+ EXPORT_SYMBOL(d_instantiate);
+@@ -1965,17 +1972,18 @@
+  */
+ void d_instantiate_new(struct dentry *entry, struct inode *inode)
+ {
++	extern int num_policy;
+ 	BUG_ON(!hlist_unhashed(&entry->d_u.d_alias));
+ 	BUG_ON(!inode);
+ 	lockdep_annotate_inode_mutex_key(inode);
+ 	security_d_instantiate(entry, inode);
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	__d_instantiate(entry, inode);
+ 	WARN_ON(!(inode->i_state & I_NEW));
+ 	inode->i_state &= ~I_NEW & ~I_CREATING;
+ 	smp_mb();
+ 	wake_up_bit(&inode->i_state, __I_NEW);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ }
+ EXPORT_SYMBOL(d_instantiate_new);
+ 
+@@ -1998,14 +2006,15 @@
+ 					   struct inode *inode,
+ 					   bool disconnected)
+ {
++	extern int num_policy;
+ 	struct dentry *res;
+ 	unsigned add_flags;
+ 
+ 	security_d_instantiate(dentry, inode);
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	res = __d_find_any_alias(inode);
+ 	if (res) {
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		dput(dentry);
+ 		goto out_iput;
+ 	}
+@@ -2025,7 +2034,7 @@
+ 		hlist_bl_unlock(&dentry->d_sb->s_roots);
+ 	}
+ 	spin_unlock(&dentry->d_lock);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 
+ 	return dentry;
+ 
+@@ -2437,9 +2446,10 @@
+  
+ void d_delete(struct dentry * dentry)
+ {
++	extern int num_policy;
+ 	struct inode *inode = dentry->d_inode;
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	spin_lock(&dentry->d_lock);
+ 	/*
+ 	 * Are we the only user?
+@@ -2448,9 +2458,10 @@
+ 		dentry->d_flags &= ~DCACHE_CANT_MOUNT;
+ 		dentry_unlink_inode(dentry);
+ 	} else {
++		extern int num_policy;
+ 		__d_drop(dentry);
+ 		spin_unlock(&dentry->d_lock);
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	}
+ }
+ EXPORT_SYMBOL(d_delete);
+@@ -2674,8 +2685,9 @@
+ void d_add(struct dentry *entry, struct inode *inode)
+ {
+ 	if (inode) {
++		extern int num_policy;
+ 		security_d_instantiate(entry, inode);
+-		spin_lock(&inode->i_lock);
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	}
+ 	__d_add(entry, inode);
+ }
+@@ -2694,10 +2706,11 @@
+  */
+ struct dentry *d_exact_alias(struct dentry *entry, struct inode *inode)
+ {
++	extern int num_policy;
+ 	struct dentry *alias;
+ 	unsigned int hash = entry->d_name.hash;
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	hlist_for_each_entry(alias, &inode->i_dentry, d_u.d_alias) {
+ 		/*
+ 		 * Don't need alias->d_lock here, because aliases with
+@@ -2719,10 +2732,10 @@
+ 			__d_rehash(alias);
+ 			spin_unlock(&alias->d_lock);
+ 		}
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		return alias;
+ 	}
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	return NULL;
+ }
+ EXPORT_SYMBOL(d_exact_alias);
+@@ -2997,6 +3010,7 @@
+  */
+ struct dentry *d_splice_alias(struct inode *inode, struct dentry *dentry)
+ {
++	extern int num_policy;
+ 	if (IS_ERR(inode))
+ 		return ERR_CAST(inode);
+ 
+@@ -3006,12 +3020,13 @@
+ 		goto out;
+ 
+ 	security_d_instantiate(dentry, inode);
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	if (S_ISDIR(inode->i_mode)) {
+ 		struct dentry *new = __d_find_any_alias(inode);
+ 		if (unlikely(new)) {
++			extern int num_policy;
+ 			/* The reference to new ensures it remains an alias */
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			write_seqlock(&rename_lock);
+ 			if (unlikely(d_ancestor(new, dentry))) {
+ 				write_sequnlock(&rename_lock);
+diff -ruN SynCord-linux-base/fs/drop_caches.c SynCord-linux-destination/fs/drop_caches.c
+--- SynCord-linux-base/fs/drop_caches.c	2023-09-04 14:55:43.171293004 +0000
++++ SynCord-linux-destination/fs/drop_caches.c	2023-09-06 09:33:00.110492569 +0000
+@@ -10,6 +10,7 @@
+ #include <linux/sysctl.h>
+ #include <linux/gfp.h>
+ #include "internal.h"
++#include <linux/my_bpf_spin_lock.h>
+ 
+ /* A global variable is a bit ugly, but it keeps the code simple */
+ int sysctl_drop_caches;
+@@ -20,7 +21,8 @@
+ 
+ 	spin_lock(&sb->s_inode_list_lock);
+ 	list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
+-		spin_lock(&inode->i_lock);
++		extern int num_policy;
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		/*
+ 		 * We must skip inodes in unusual state. We may also skip
+ 		 * inodes without pages but we deliberately won't in case
+@@ -28,11 +30,11 @@
+ 		 */
+ 		if ((inode->i_state & (I_FREEING|I_WILL_FREE|I_NEW)) ||
+ 		    (inode->i_mapping->nrpages == 0 && !need_resched())) {
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			continue;
+ 		}
+ 		__iget(inode);
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		spin_unlock(&sb->s_inode_list_lock);
+ 
+ 		cond_resched();
+diff -ruN SynCord-linux-base/fs/exportfs/expfs.c SynCord-linux-destination/fs/exportfs/expfs.c
+--- SynCord-linux-base/fs/exportfs/expfs.c	2023-09-04 14:55:43.171293004 +0000
++++ SynCord-linux-destination/fs/exportfs/expfs.c	2023-09-06 09:33:00.526494241 +0000
+@@ -17,6 +17,7 @@
+ #include <linux/namei.h>
+ #include <linux/sched.h>
+ #include <linux/cred.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #define dprintk(fmt, args...) do{}while(0)
+ 
+@@ -44,6 +45,8 @@
+ 		int (*acceptable)(void *context, struct dentry *dentry),
+ 		void *context)
+ {
++	extern int num_policy;
++	extern int num_policy;
+ 	struct dentry *dentry, *toput = NULL;
+ 	struct inode *inode;
+ 
+@@ -51,20 +54,21 @@
+ 		return result;
+ 
+ 	inode = result->d_inode;
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	hlist_for_each_entry(dentry, &inode->i_dentry, d_u.d_alias) {
++		extern int num_policy;
+ 		dget(dentry);
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		if (toput)
+ 			dput(toput);
+ 		if (dentry != result && acceptable(context, dentry)) {
+ 			dput(result);
+ 			return dentry;
+ 		}
+-		spin_lock(&inode->i_lock);
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		toput = dentry;
+ 	}
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 
+ 	if (toput)
+ 		dput(toput);
+diff -ruN SynCord-linux-base/fs/ext4/inode.c SynCord-linux-destination/fs/ext4/inode.c
+--- SynCord-linux-base/fs/ext4/inode.c	2023-09-04 14:55:43.171293004 +0000
++++ SynCord-linux-destination/fs/ext4/inode.c	2023-09-06 09:33:03.574506574 +0000
+@@ -40,6 +40,7 @@
+ #include <linux/bitops.h>
+ #include <linux/iomap.h>
+ #include <linux/iversion.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include "ext4_jbd2.h"
+ #include "xattr.h"
+@@ -4386,6 +4387,7 @@
+ 
+ int ext4_inode_attach_jinode(struct inode *inode)
+ {
++	extern int num_policy;
+ 	struct ext4_inode_info *ei = EXT4_I(inode);
+ 	struct jbd2_inode *jinode;
+ 
+@@ -4393,17 +4395,17 @@
+ 		return 0;
+ 
+ 	jinode = jbd2_alloc_inode(GFP_KERNEL);
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	if (!ei->jinode) {
+ 		if (!jinode) {
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			return -ENOMEM;
+ 		}
+ 		ei->jinode = jinode;
+ 		jbd2_journal_init_jbd_inode(ei->jinode, inode);
+ 		jinode = NULL;
+ 	}
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	if (unlikely(jinode != NULL))
+ 		jbd2_free_inode(jinode);
+ 	return 0;
+@@ -5149,6 +5151,7 @@
+ static int other_inode_match(struct inode * inode, unsigned long ino,
+ 			     void *data)
+ {
++	extern int num_policy;
+ 	struct other_inode *oi = (struct other_inode *) data;
+ 
+ 	if ((inode->i_ino != ino) ||
+@@ -5156,14 +5159,14 @@
+ 			       I_DIRTY_INODE)) ||
+ 	    ((inode->i_state & I_DIRTY_TIME) == 0))
+ 		return 0;
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	if (((inode->i_state & (I_FREEING | I_WILL_FREE | I_NEW |
+ 				I_DIRTY_INODE)) == 0) &&
+ 	    (inode->i_state & I_DIRTY_TIME)) {
+ 		struct ext4_inode_info	*ei = EXT4_I(inode);
+ 
+ 		inode->i_state &= ~(I_DIRTY_TIME | I_DIRTY_TIME_EXPIRED);
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 
+ 		spin_lock(&ei->i_raw_lock);
+ 		EXT4_INODE_SET_XTIME(i_ctime, inode, oi->raw_inode);
+@@ -5174,7 +5177,7 @@
+ 		trace_ext4_other_inode_update_time(inode, oi->orig_ino);
+ 		return -1;
+ 	}
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	return -1;
+ }
+ 
+diff -ruN SynCord-linux-base/fs/ext4/migrate.c SynCord-linux-destination/fs/ext4/migrate.c
+--- SynCord-linux-base/fs/ext4/migrate.c	2023-09-04 14:55:43.171293004 +0000
++++ SynCord-linux-destination/fs/ext4/migrate.c	2023-09-06 09:33:03.058504474 +0000
+@@ -8,6 +8,7 @@
+ #include <linux/slab.h>
+ #include "ext4_jbd2.h"
+ #include "ext4_extents.h"
++#include <linux/my_bpf_spin_lock.h>
+ 
+ /*
+  * The contiguous blocks details which can be
+@@ -309,6 +310,7 @@
+ static int ext4_ext_swap_inode_data(handle_t *handle, struct inode *inode,
+ 						struct inode *tmp_inode)
+ {
++	extern int num_policy;
+ 	int retval;
+ 	__le32	i_data[3];
+ 	struct ext4_inode_info *ei = EXT4_I(inode);
+@@ -357,9 +359,9 @@
+ 	 * update the original inode i_blocks for extent blocks
+ 	 * via quota APIs. The quota update happened via tmp_inode already.
+ 	 */
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	inode->i_blocks += tmp_inode->i_blocks;
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	up_write(&EXT4_I(inode)->i_data_sem);
+ 
+ 	/*
+diff -ruN SynCord-linux-base/fs/f2fs/super.c SynCord-linux-destination/fs/f2fs/super.c
+--- SynCord-linux-base/fs/f2fs/super.c	2023-09-04 14:55:43.171293004 +0000
++++ SynCord-linux-destination/fs/f2fs/super.c	2023-09-06 09:33:02.190500954 +0000
+@@ -24,6 +24,7 @@
+ #include <linux/sysfs.h>
+ #include <linux/quota.h>
+ #include <linux/unicode.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include "f2fs.h"
+ #include "node.h"
+@@ -935,9 +936,10 @@
+ 	 */
+ 	if ((!inode_unhashed(inode) && inode->i_state & I_SYNC)) {
+ 		if (!inode->i_nlink && !is_bad_inode(inode)) {
++			extern int num_policy;
+ 			/* to avoid evict_inode call simultaneously */
+ 			atomic_inc(&inode->i_count);
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 
+ 			/* some remained atomic pages should discarded */
+ 			if (f2fs_is_atomic_file(inode))
+@@ -958,7 +960,7 @@
+ 
+ 			sb_end_intwrite(inode->i_sb);
+ 
+-			spin_lock(&inode->i_lock);
++			my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 			atomic_dec(&inode->i_count);
+ 		}
+ 		trace_f2fs_drop_inode(inode, 0);
+diff -ruN SynCord-linux-base/fs/gfs2/dir.c SynCord-linux-destination/fs/gfs2/dir.c
+--- SynCord-linux-base/fs/gfs2/dir.c	2023-09-04 14:55:43.175292998 +0000
++++ SynCord-linux-destination/fs/gfs2/dir.c	2023-09-06 09:33:01.810499416 +0000
+@@ -60,6 +60,7 @@
+ #include <linux/crc32.h>
+ #include <linux/vmalloc.h>
+ #include <linux/bio.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include "gfs2.h"
+ #include "incore.h"
+@@ -337,6 +338,7 @@
+ 
+ static __be64 *gfs2_dir_get_hash_table(struct gfs2_inode *ip)
+ {
++	extern int num_policy;
+ 	struct inode *inode = &ip->i_inode;
+ 	int ret;
+ 	u32 hsize;
+@@ -368,12 +370,12 @@
+ 		return ERR_PTR(ret);
+ 	}
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	if (likely(!ip->i_hash_cache)) {
+ 		ip->i_hash_cache = hc;
+ 		hc = NULL;
+ 	}
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	kvfree(hc);
+ 
+ 	return ip->i_hash_cache;
+diff -ruN SynCord-linux-base/fs/gfs2/super.c SynCord-linux-destination/fs/gfs2/super.c
+--- SynCord-linux-base/fs/gfs2/super.c	2023-09-04 14:55:43.175292998 +0000
++++ SynCord-linux-destination/fs/gfs2/super.c	2023-09-06 09:33:01.786499320 +0000
+@@ -24,6 +24,7 @@
+ #include <linux/writeback.h>
+ #include <linux/backing-dev.h>
+ #include <linux/kernel.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include "gfs2.h"
+ #include "incore.h"
+@@ -520,10 +521,11 @@
+ 	if (ret)
+ 		mark_inode_dirty_sync(inode);
+ 	else {
+-		spin_lock(&inode->i_lock);
++		extern int num_policy;
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		if (!(inode->i_flags & I_DIRTY))
+ 			gfs2_ordered_del_inode(ip);
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	}
+ 	return ret;
+ }
+diff -ruN SynCord-linux-base/fs/inode.c SynCord-linux-destination/fs/inode.c
+--- SynCord-linux-base/fs/inode.c	2023-09-04 14:55:43.175292998 +0000
++++ SynCord-linux-destination/fs/inode.c	2023-09-06 09:33:01.702498980 +0000
+@@ -22,6 +22,7 @@
+ #include <linux/iversion.h>
+ #include <trace/events/writeback.h>
+ #include "internal.h"
++#include <linux/my_bpf_spin_lock.h>
+ 
+ /*
+  * Inode locking rules:
+@@ -491,12 +492,13 @@
+  */
+ void __insert_inode_hash(struct inode *inode, unsigned long hashval)
+ {
++	extern int num_policy;
+ 	struct hlist_head *b = inode_hashtable + hash(inode->i_sb, hashval);
+ 
+ 	spin_lock(&inode_hash_lock);
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	hlist_add_head(&inode->i_hash, b);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	spin_unlock(&inode_hash_lock);
+ }
+ EXPORT_SYMBOL(__insert_inode_hash);
+@@ -509,10 +511,11 @@
+  */
+ void __remove_inode_hash(struct inode *inode)
+ {
++	extern int num_policy;
+ 	spin_lock(&inode_hash_lock);
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	hlist_del_init(&inode->i_hash);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	spin_unlock(&inode_hash_lock);
+ }
+ EXPORT_SYMBOL(__remove_inode_hash);
+@@ -552,6 +555,7 @@
+  */
+ static void evict(struct inode *inode)
+ {
++	extern int num_policy;
+ 	const struct super_operations *op = inode->i_sb->s_op;
+ 
+ 	BUG_ON(!(inode->i_state & I_FREEING));
+@@ -583,10 +587,10 @@
+ 
+ 	remove_inode_hash(inode);
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	wake_up_bit(&inode->i_state, __I_NEW);
+ 	BUG_ON(inode->i_state != (I_FREEING | I_CLEAR));
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 
+ 	destroy_inode(inode);
+ }
+@@ -628,18 +632,19 @@
+ again:
+ 	spin_lock(&sb->s_inode_list_lock);
+ 	list_for_each_entry_safe(inode, next, &sb->s_inodes, i_sb_list) {
++		extern int num_policy;
+ 		if (atomic_read(&inode->i_count))
+ 			continue;
+ 
+-		spin_lock(&inode->i_lock);
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		if (inode->i_state & (I_NEW | I_FREEING | I_WILL_FREE)) {
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			continue;
+ 		}
+ 
+ 		inode->i_state |= I_FREEING;
+ 		inode_lru_list_del(inode);
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		list_add(&inode->i_lru, &dispose);
+ 
+ 		/*
+@@ -678,25 +683,26 @@
+ 
+ 	spin_lock(&sb->s_inode_list_lock);
+ 	list_for_each_entry_safe(inode, next, &sb->s_inodes, i_sb_list) {
+-		spin_lock(&inode->i_lock);
++		extern int num_policy;
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		if (inode->i_state & (I_NEW | I_FREEING | I_WILL_FREE)) {
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			continue;
+ 		}
+ 		if (inode->i_state & I_DIRTY_ALL && !kill_dirty) {
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			busy = 1;
+ 			continue;
+ 		}
+ 		if (atomic_read(&inode->i_count)) {
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			busy = 1;
+ 			continue;
+ 		}
+ 
+ 		inode->i_state |= I_FREEING;
+ 		inode_lru_list_del(inode);
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		list_add(&inode->i_lru, &dispose);
+ 	}
+ 	spin_unlock(&sb->s_inode_list_lock);
+@@ -724,6 +730,7 @@
+ static enum lru_status inode_lru_isolate(struct list_head *item,
+ 		struct list_lru_one *lru, spinlock_t *lru_lock, void *arg)
+ {
++	extern int num_policy;
+ 	struct list_head *freeable = arg;
+ 	struct inode	*inode = container_of(item, struct inode, i_lru);
+ 
+@@ -740,22 +747,25 @@
+ 	 */
+ 	if (atomic_read(&inode->i_count) ||
+ 	    (inode->i_state & ~I_REFERENCED)) {
++		extern int num_policy;
+ 		list_lru_isolate(lru, &inode->i_lru);
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		this_cpu_dec(nr_unused);
+ 		return LRU_REMOVED;
+ 	}
+ 
+ 	/* recently referenced inodes get one more pass */
+ 	if (inode->i_state & I_REFERENCED) {
++		extern int num_policy;
+ 		inode->i_state &= ~I_REFERENCED;
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		return LRU_ROTATE;
+ 	}
+ 
+ 	if (inode_has_buffers(inode) || inode->i_data.nrpages) {
++		extern int num_policy;
+ 		__iget(inode);
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		spin_unlock(lru_lock);
+ 		if (remove_inode_buffers(inode)) {
+ 			unsigned long reap;
+@@ -775,7 +785,7 @@
+ 	WARN_ON(inode->i_state & I_NEW);
+ 	inode->i_state |= I_FREEING;
+ 	list_lru_isolate_move(lru, &inode->i_lru, freeable);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 
+ 	this_cpu_dec(nr_unused);
+ 	return LRU_REMOVED;
+@@ -811,17 +821,19 @@
+ 
+ repeat:
+ 	hlist_for_each_entry(inode, head, i_hash) {
++		extern int num_policy;
+ 		if (inode->i_sb != sb)
+ 			continue;
+ 		if (!test(inode, data))
+ 			continue;
+-		spin_lock(&inode->i_lock);
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		if (inode->i_state & (I_FREEING|I_WILL_FREE)) {
+ 			__wait_on_freeing_inode(inode);
+ 			goto repeat;
+ 		}
+ 		if (unlikely(inode->i_state & I_CREATING)) {
+-			spin_unlock(&inode->i_lock);
++			extern int num_policy;
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			return ERR_PTR(-ESTALE);
+ 		}
+ 		__iget(inode);
+@@ -842,17 +854,19 @@
+ 
+ repeat:
+ 	hlist_for_each_entry(inode, head, i_hash) {
++		extern int num_policy;
+ 		if (inode->i_ino != ino)
+ 			continue;
+ 		if (inode->i_sb != sb)
+ 			continue;
+-		spin_lock(&inode->i_lock);
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		if (inode->i_state & (I_FREEING|I_WILL_FREE)) {
+ 			__wait_on_freeing_inode(inode);
+ 			goto repeat;
+ 		}
+ 		if (unlikely(inode->i_state & I_CREATING)) {
+-			spin_unlock(&inode->i_lock);
++			extern int num_policy;
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			return ERR_PTR(-ESTALE);
+ 		}
+ 		__iget(inode);
+@@ -919,9 +933,10 @@
+ 	struct inode *inode = alloc_inode(sb);
+ 
+ 	if (inode) {
+-		spin_lock(&inode->i_lock);
++		extern int num_policy;
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		inode->i_state = 0;
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		INIT_LIST_HEAD(&inode->i_sb_list);
+ 	}
+ 	return inode;
+@@ -982,25 +997,27 @@
+  */
+ void unlock_new_inode(struct inode *inode)
+ {
++	extern int num_policy;
+ 	lockdep_annotate_inode_mutex_key(inode);
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	WARN_ON(!(inode->i_state & I_NEW));
+ 	inode->i_state &= ~I_NEW & ~I_CREATING;
+ 	smp_mb();
+ 	wake_up_bit(&inode->i_state, __I_NEW);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ }
+ EXPORT_SYMBOL(unlock_new_inode);
+ 
+ void discard_new_inode(struct inode *inode)
+ {
++	extern int num_policy;
+ 	lockdep_annotate_inode_mutex_key(inode);
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	WARN_ON(!(inode->i_state & I_NEW));
+ 	inode->i_state &= ~I_NEW;
+ 	smp_mb();
+ 	wake_up_bit(&inode->i_state, __I_NEW);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	iput(inode);
+ }
+ EXPORT_SYMBOL(discard_new_inode);
+@@ -1189,11 +1206,12 @@
+ 		/* We released the lock, so.. */
+ 		old = find_inode_fast(sb, head, ino);
+ 		if (!old) {
++			extern int num_policy;
+ 			inode->i_ino = ino;
+-			spin_lock(&inode->i_lock);
++			my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 			inode->i_state = I_NEW;
+ 			hlist_add_head(&inode->i_hash, head);
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			inode_sb_list_add(inode);
+ 			spin_unlock(&inode_hash_lock);
+ 
+@@ -1286,12 +1304,13 @@
+ 
+ struct inode *igrab(struct inode *inode)
+ {
+-	spin_lock(&inode->i_lock);
++	extern int num_policy;
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	if (!(inode->i_state & (I_FREEING|I_WILL_FREE))) {
+ 		__iget(inode);
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	} else {
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		/*
+ 		 * Handle the case where s_op->clear_inode is not been
+ 		 * called yet, and somebody is calling igrab
+@@ -1454,35 +1473,40 @@
+ 	struct hlist_head *head = inode_hashtable + hash(sb, ino);
+ 
+ 	while (1) {
++		extern int num_policy;
+ 		struct inode *old = NULL;
+ 		spin_lock(&inode_hash_lock);
+ 		hlist_for_each_entry(old, head, i_hash) {
++			extern int num_policy;
+ 			if (old->i_ino != ino)
+ 				continue;
+ 			if (old->i_sb != sb)
+ 				continue;
+-			spin_lock(&old->i_lock);
++			my_bpf_spin_lock(&old->i_lock, num_policy);
+ 			if (old->i_state & (I_FREEING|I_WILL_FREE)) {
+-				spin_unlock(&old->i_lock);
++				extern int num_policy;
++				my_bpf_spin_unlock(&old->i_lock, num_policy);
+ 				continue;
+ 			}
+ 			break;
+ 		}
+ 		if (likely(!old)) {
+-			spin_lock(&inode->i_lock);
++			extern int num_policy;
++			my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 			inode->i_state |= I_NEW | I_CREATING;
+ 			hlist_add_head(&inode->i_hash, head);
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			spin_unlock(&inode_hash_lock);
+ 			return 0;
+ 		}
+ 		if (unlikely(old->i_state & I_CREATING)) {
+-			spin_unlock(&old->i_lock);
++			extern int num_policy;
++			my_bpf_spin_unlock(&old->i_lock, num_policy);
+ 			spin_unlock(&inode_hash_lock);
+ 			return -EBUSY;
+ 		}
+ 		__iget(old);
+-		spin_unlock(&old->i_lock);
++		my_bpf_spin_unlock(&old->i_lock, num_policy);
+ 		spin_unlock(&inode_hash_lock);
+ 		wait_on_inode(old);
+ 		if (unlikely(!inode_unhashed(old))) {
+@@ -1529,6 +1553,7 @@
+  */
+ static void iput_final(struct inode *inode)
+ {
++	extern int num_policy;
+ 	struct super_block *sb = inode->i_sb;
+ 	const struct super_operations *op = inode->i_sb->s_op;
+ 	int drop;
+@@ -1541,16 +1566,18 @@
+ 		drop = generic_drop_inode(inode);
+ 
+ 	if (!drop && (sb->s_flags & SB_ACTIVE)) {
++		extern int num_policy;
+ 		inode_add_lru(inode);
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		return;
+ 	}
+ 
+ 	if (!drop) {
++		extern int num_policy;
+ 		inode->i_state |= I_WILL_FREE;
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		write_inode_now(inode, 1);
+-		spin_lock(&inode->i_lock);
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		WARN_ON(inode->i_state & I_NEW);
+ 		inode->i_state &= ~I_WILL_FREE;
+ 	}
+@@ -1558,7 +1585,7 @@
+ 	inode->i_state |= I_FREEING;
+ 	if (!list_empty(&inode->i_lru))
+ 		inode_lru_list_del(inode);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 
+ 	evict(inode);
+ }
+@@ -1580,8 +1607,9 @@
+ retry:
+ 	if (atomic_dec_and_lock(&inode->i_count, &inode->i_lock)) {
+ 		if (inode->i_nlink && (inode->i_state & I_DIRTY_TIME)) {
++			extern int num_policy;
+ 			atomic_inc(&inode->i_count);
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			trace_writeback_lazytime_iput(inode);
+ 			mark_inode_dirty_sync(inode);
+ 			goto retry;
+@@ -1945,11 +1973,12 @@
+  */
+ static void __wait_on_freeing_inode(struct inode *inode)
+ {
++	extern int num_policy;
+ 	wait_queue_head_t *wq;
+ 	DEFINE_WAIT_BIT(wait, &inode->i_state, __I_NEW);
+ 	wq = bit_waitqueue(&inode->i_state, __I_NEW);
+ 	prepare_to_wait(wq, &wait.wq_entry, TASK_UNINTERRUPTIBLE);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	spin_unlock(&inode_hash_lock);
+ 	schedule();
+ 	finish_wait(wq, &wait.wq_entry);
+diff -ruN SynCord-linux-base/fs/nfs/callback_proc.c SynCord-linux-destination/fs/nfs/callback_proc.c
+--- SynCord-linux-base/fs/nfs/callback_proc.c	2023-09-04 14:55:43.175292998 +0000
++++ SynCord-linux-destination/fs/nfs/callback_proc.c	2023-09-06 09:33:02.606502641 +0000
+@@ -17,6 +17,7 @@
+ #include "pnfs.h"
+ #include "nfs4session.h"
+ #include "nfs4trace.h"
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #define NFSDBG_FACILITY NFSDBG_CALLBACK
+ 
+@@ -248,6 +249,7 @@
+ static u32 initiate_file_draining(struct nfs_client *clp,
+ 				  struct cb_layoutrecallargs *args)
+ {
++	extern int num_policy;
+ 	struct inode *ino;
+ 	struct pnfs_layout_hdr *lo;
+ 	u32 rv = NFS4ERR_NOMATCHING_LAYOUT;
+@@ -263,10 +265,10 @@
+ 	pnfs_layoutcommit_inode(ino, false);
+ 
+ 
+-	spin_lock(&ino->i_lock);
++	my_bpf_spin_lock(&ino->i_lock, num_policy);
+ 	lo = NFS_I(ino)->layout;
+ 	if (!lo) {
+-		spin_unlock(&ino->i_lock);
++		my_bpf_spin_unlock(&ino->i_lock, num_policy);
+ 		goto out;
+ 	}
+ 	pnfs_get_layout_hdr(lo);
+@@ -301,7 +303,7 @@
+ 		}
+ 	}
+ unlock:
+-	spin_unlock(&ino->i_lock);
++	my_bpf_spin_unlock(&ino->i_lock, num_policy);
+ 	pnfs_free_lseg_list(&free_me_list);
+ 	/* Free all lsegs that are attached to commit buckets */
+ 	nfs_commit_inode(ino, 0);
+diff -ruN SynCord-linux-base/fs/nfs/delegation.c SynCord-linux-destination/fs/nfs/delegation.c
+--- SynCord-linux-base/fs/nfs/delegation.c	2023-09-04 14:55:43.175292998 +0000
++++ SynCord-linux-destination/fs/nfs/delegation.c	2023-09-06 09:33:02.530502333 +0000
+@@ -14,6 +14,7 @@
+ #include <linux/slab.h>
+ #include <linux/spinlock.h>
+ #include <linux/iversion.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <linux/nfs4.h>
+ #include <linux/nfs_fs.h>
+@@ -357,6 +358,7 @@
+ 				  const nfs4_stateid *stateid,
+ 				  unsigned long pagemod_limit)
+ {
++	extern int num_policy;
+ 	struct nfs_server *server = NFS_SERVER(inode);
+ 	struct nfs_client *clp = server->nfs_client;
+ 	struct nfs_inode *nfsi = NFS_I(inode);
+@@ -416,10 +418,10 @@
+ 
+ 	trace_nfs4_set_delegation(inode, type);
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	if (NFS_I(inode)->cache_validity & (NFS_INO_INVALID_ATTR|NFS_INO_INVALID_ATIME))
+ 		NFS_I(inode)->cache_validity |= NFS_INO_REVAL_FORCED;
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ out:
+ 	spin_unlock(&clp->cl_lock);
+ 	if (delegation != NULL)
+diff -ruN SynCord-linux-base/fs/nfs/dir.c SynCord-linux-destination/fs/nfs/dir.c
+--- SynCord-linux-base/fs/nfs/dir.c	2023-09-04 14:55:43.175292998 +0000
++++ SynCord-linux-destination/fs/nfs/dir.c	2023-09-06 09:33:02.838503581 +0000
+@@ -38,6 +38,7 @@
+ #include <linux/sched.h>
+ #include <linux/kmemleak.h>
+ #include <linux/xattr.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include "delegation.h"
+ #include "iostat.h"
+@@ -74,18 +75,19 @@
+ 	struct nfs_open_dir_context *ctx;
+ 	ctx = kmalloc(sizeof(*ctx), GFP_KERNEL);
+ 	if (ctx != NULL) {
++		extern int num_policy;
+ 		ctx->duped = 0;
+ 		ctx->attr_gencount = nfsi->attr_gencount;
+ 		ctx->dir_cookie = 0;
+ 		ctx->dup_cookie = 0;
+ 		ctx->cred = get_cred(cred);
+-		spin_lock(&dir->i_lock);
++		my_bpf_spin_lock(&dir->i_lock, num_policy);
+ 		if (list_empty(&nfsi->open_files) &&
+ 		    (nfsi->cache_validity & NFS_INO_DATA_INVAL_DEFER))
+ 			nfsi->cache_validity |= NFS_INO_INVALID_DATA |
+ 				NFS_INO_REVAL_FORCED;
+ 		list_add(&ctx->list, &nfsi->open_files);
+-		spin_unlock(&dir->i_lock);
++		my_bpf_spin_unlock(&dir->i_lock, num_policy);
+ 		return ctx;
+ 	}
+ 	return  ERR_PTR(-ENOMEM);
+@@ -93,9 +95,10 @@
+ 
+ static void put_nfs_open_dir_context(struct inode *dir, struct nfs_open_dir_context *ctx)
+ {
+-	spin_lock(&dir->i_lock);
++	extern int num_policy;
++	my_bpf_spin_lock(&dir->i_lock, num_policy);
+ 	list_del(&ctx->list);
+-	spin_unlock(&dir->i_lock);
++	my_bpf_spin_unlock(&dir->i_lock, num_policy);
+ 	put_cred(ctx->cred);
+ 	kfree(ctx);
+ }
+@@ -1325,7 +1328,8 @@
+ /* Ensure that we revalidate inode->i_nlink */
+ static void nfs_drop_nlink(struct inode *inode)
+ {
+-	spin_lock(&inode->i_lock);
++	extern int num_policy;
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	/* drop the inode if we're reasonably sure this is the last link */
+ 	if (inode->i_nlink > 0)
+ 		drop_nlink(inode);
+@@ -1334,7 +1338,7 @@
+ 		| NFS_INO_INVALID_CTIME
+ 		| NFS_INO_INVALID_OTHER
+ 		| NFS_INO_REVAL_FORCED;
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ }
+ 
+ /*
+@@ -2105,12 +2109,13 @@
+ 	rpc_put_task(task);
+ 	/* Ensure the inode attributes are revalidated */
+ 	if (error == 0) {
+-		spin_lock(&old_inode->i_lock);
++		extern int num_policy;
++		my_bpf_spin_lock(&old_inode->i_lock, num_policy);
+ 		NFS_I(old_inode)->attr_gencount = nfs_inc_attr_generation_counter();
+ 		NFS_I(old_inode)->cache_validity |= NFS_INO_INVALID_CHANGE
+ 			| NFS_INO_INVALID_CTIME
+ 			| NFS_INO_REVAL_FORCED;
+-		spin_unlock(&old_inode->i_lock);
++		my_bpf_spin_unlock(&old_inode->i_lock, num_policy);
+ 	}
+ out:
+ 	if (rehash)
+@@ -2177,12 +2182,13 @@
+ 
+ 	spin_lock(&nfs_access_lru_lock);
+ 	list_for_each_entry_safe(nfsi, next, &nfs_access_lru_list, access_cache_inode_lru) {
++		extern int num_policy;
+ 		struct inode *inode;
+ 
+ 		if (nr_to_scan-- == 0)
+ 			break;
+ 		inode = &nfsi->vfs_inode;
+-		spin_lock(&inode->i_lock);
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		if (list_empty(&nfsi->access_cache_entry_lru))
+ 			goto remove_lru_entry;
+ 		cache = list_entry(nfsi->access_cache_entry_lru.next,
+@@ -2200,7 +2206,7 @@
+ 			clear_bit(NFS_INO_ACL_LRU_SET, &nfsi->flags);
+ 			smp_mb__after_atomic();
+ 		}
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	}
+ 	spin_unlock(&nfs_access_lru_lock);
+ 	nfs_access_free_list(&head);
+@@ -2258,6 +2264,7 @@
+ 
+ void nfs_access_zap_cache(struct inode *inode)
+ {
++	extern int num_policy;
+ 	LIST_HEAD(head);
+ 
+ 	if (test_bit(NFS_INO_ACL_LRU_SET, &NFS_I(inode)->flags) == 0)
+@@ -2267,9 +2274,9 @@
+ 	if (test_and_clear_bit(NFS_INO_ACL_LRU_SET, &NFS_I(inode)->flags))
+ 		list_del_init(&NFS_I(inode)->access_cache_inode_lru);
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	__nfs_access_zap_cache(NFS_I(inode), &head);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	spin_unlock(&nfs_access_lru_lock);
+ 	nfs_access_free_list(&head);
+ }
+@@ -2303,6 +2310,7 @@
+ 
+ 	spin_lock(&inode->i_lock);
+ 	for(;;) {
++		extern int num_policy;
+ 		if (nfsi->cache_validity & NFS_INO_INVALID_ACCESS)
+ 			goto out_zap;
+ 		cache = nfs_access_search_rbtree(inode, cred);
+@@ -2321,7 +2329,7 @@
+ 		err = __nfs_revalidate_inode(NFS_SERVER(inode), inode);
+ 		if (err)
+ 			return err;
+-		spin_lock(&inode->i_lock);
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		retry = false;
+ 	}
+ 	res->cred = cache->cred;
+@@ -2369,6 +2377,7 @@
+ 
+ static void nfs_access_add_rbtree(struct inode *inode, struct nfs_access_entry *set)
+ {
++	extern int num_policy;
+ 	struct nfs_inode *nfsi = NFS_I(inode);
+ 	struct rb_root *root_node = &nfsi->access_cache;
+ 	struct rb_node **p = &root_node->rb_node;
+@@ -2376,7 +2385,7 @@
+ 	struct nfs_access_entry *entry;
+ 	int cmp;
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	while (*p != NULL) {
+ 		parent = *p;
+ 		entry = rb_entry(parent, struct nfs_access_entry, rb_node);
+@@ -2392,13 +2401,13 @@
+ 	rb_link_node(&set->rb_node, parent, p);
+ 	rb_insert_color(&set->rb_node, root_node);
+ 	list_add_tail(&set->lru, &nfsi->access_cache_entry_lru);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	return;
+ found:
+ 	rb_replace_node(parent, &set->rb_node, root_node);
+ 	list_add_tail(&set->lru, &nfsi->access_cache_entry_lru);
+ 	list_del(&entry->lru);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	nfs_access_free_entry(entry);
+ }
+ 
+diff -ruN SynCord-linux-base/fs/nfs/direct.c SynCord-linux-destination/fs/nfs/direct.c
+--- SynCord-linux-base/fs/nfs/direct.c	2023-09-04 14:55:43.175292998 +0000
++++ SynCord-linux-destination/fs/nfs/direct.c	2023-09-06 09:33:02.598502608 +0000
+@@ -48,6 +48,7 @@
+ #include <linux/slab.h>
+ #include <linux/task_io_accounting_ops.h>
+ #include <linux/module.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <linux/nfs_fs.h>
+ #include <linux/nfs_page.h>
+@@ -645,14 +646,15 @@
+ 		/* Bump the transmission count */
+ 		req->wb_nio++;
+ 		if (!nfs_pageio_add_request(&desc, req)) {
++			extern int num_policy;
+ 			nfs_list_move_request(req, &failed);
+-			spin_lock(&cinfo.inode->i_lock);
++			my_bpf_spin_lock(&cinfo.inode->i_lock, num_policy);
+ 			dreq->flags = 0;
+ 			if (desc.pg_error < 0)
+ 				dreq->error = desc.pg_error;
+ 			else
+ 				dreq->error = -EIO;
+-			spin_unlock(&cinfo.inode->i_lock);
++			my_bpf_spin_unlock(&cinfo.inode->i_lock, num_policy);
+ 		}
+ 		nfs_release_request(req);
+ 	}
+diff -ruN SynCord-linux-base/fs/nfs/filelayout/filelayout.c SynCord-linux-destination/fs/nfs/filelayout/filelayout.c
+--- SynCord-linux-base/fs/nfs/filelayout/filelayout.c	2023-09-04 14:55:43.175292998 +0000
++++ SynCord-linux-destination/fs/nfs/filelayout/filelayout.c	2023-09-06 09:33:02.726503127 +0000
+@@ -33,6 +33,7 @@
+ #include <linux/nfs_page.h>
+ #include <linux/module.h>
+ #include <linux/backing-dev.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <linux/sunrpc/metrics.h>
+ 
+@@ -764,6 +765,7 @@
+ 			     struct nfs_commit_info *cinfo,
+ 			     gfp_t gfp_flags)
+ {
++	extern int num_policy;
+ 	struct nfs4_filelayout_segment *fl = FILELAYOUT_LSEG(lseg);
+ 	struct pnfs_commit_bucket *buckets;
+ 	int size, i;
+@@ -795,7 +797,7 @@
+ 		buckets[i].direct_verf.committed = NFS_INVALID_STABLE_HOW;
+ 	}
+ 
+-	spin_lock(&cinfo->inode->i_lock);
++	my_bpf_spin_lock(&cinfo->inode->i_lock, num_policy);
+ 	if (cinfo->ds->nbuckets >= size)
+ 		goto out;
+ 	for (i = 0; i < cinfo->ds->nbuckets; i++) {
+@@ -811,7 +813,7 @@
+ 	swap(cinfo->ds->buckets, buckets);
+ 	cinfo->ds->nbuckets = size;
+ out:
+-	spin_unlock(&cinfo->inode->i_lock);
++	my_bpf_spin_unlock(&cinfo->inode->i_lock, num_policy);
+ 	kfree(buckets);
+ 	return 0;
+ }
+diff -ruN SynCord-linux-base/fs/nfs/flexfilelayout/flexfilelayout.c SynCord-linux-destination/fs/nfs/flexfilelayout/flexfilelayout.c
+--- SynCord-linux-base/fs/nfs/flexfilelayout/flexfilelayout.c	2023-09-04 14:55:43.175292998 +0000
++++ SynCord-linux-destination/fs/nfs/flexfilelayout/flexfilelayout.c	2023-09-06 09:33:02.954504052 +0000
+@@ -12,6 +12,7 @@
+ #include <linux/nfs_page.h>
+ #include <linux/module.h>
+ #include <linux/sched/mm.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <linux/sunrpc/metrics.h>
+ 
+@@ -179,37 +180,39 @@
+ ff_layout_add_mirror(struct pnfs_layout_hdr *lo,
+ 		struct nfs4_ff_layout_mirror *mirror)
+ {
++	extern int num_policy;
+ 	struct nfs4_flexfile_layout *ff_layout = FF_LAYOUT_FROM_HDR(lo);
+ 	struct nfs4_ff_layout_mirror *pos;
+ 	struct inode *inode = lo->plh_inode;
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	list_for_each_entry(pos, &ff_layout->mirrors, mirrors) {
+ 		if (memcmp(&mirror->devid, &pos->devid, sizeof(pos->devid)) != 0)
+ 			continue;
+ 		if (!ff_mirror_match_fh(mirror, pos))
+ 			continue;
+ 		if (refcount_inc_not_zero(&pos->ref)) {
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			return pos;
+ 		}
+ 	}
+ 	list_add(&mirror->mirrors, &ff_layout->mirrors);
+ 	mirror->layout = lo;
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	return mirror;
+ }
+ 
+ static void
+ ff_layout_remove_mirror(struct nfs4_ff_layout_mirror *mirror)
+ {
++	extern int num_policy;
+ 	struct inode *inode;
+ 	if (mirror->layout == NULL)
+ 		return;
+ 	inode = mirror->layout->plh_inode;
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	list_del(&mirror->mirrors);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	mirror->layout = NULL;
+ }
+ 
+@@ -579,18 +582,19 @@
+ 	dprintk("--> %s\n", __func__);
+ 
+ 	if (lseg->pls_range.iomode == IOMODE_RW) {
++		extern int num_policy;
+ 		struct nfs4_flexfile_layout *ffl;
+ 		struct inode *inode;
+ 
+ 		ffl = FF_LAYOUT_FROM_HDR(lseg->pls_layout);
+ 		inode = ffl->generic_hdr.plh_inode;
+-		spin_lock(&inode->i_lock);
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		if (!ff_layout_has_rw_segments(lseg->pls_layout)) {
+ 			ffl->commit_info.nbuckets = 0;
+ 			kfree(ffl->commit_info.buckets);
+ 			ffl->commit_info.buckets = NULL;
+ 		}
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	}
+ 	_ff_layout_free_lseg(fls);
+ }
+@@ -751,6 +755,7 @@
+ 			    struct nfs_commit_info *cinfo,
+ 			    gfp_t gfp_flags)
+ {
++	extern int num_policy;
+ 	struct nfs4_ff_layout_segment *fls = FF_LAYOUT_LSEG(lseg);
+ 	struct pnfs_commit_bucket *buckets;
+ 	int size;
+@@ -771,9 +776,10 @@
+ 	if (!buckets)
+ 		return -ENOMEM;
+ 	else {
++		extern int num_policy;
+ 		int i;
+ 
+-		spin_lock(&cinfo->inode->i_lock);
++		my_bpf_spin_lock(&cinfo->inode->i_lock, num_policy);
+ 		if (cinfo->ds->nbuckets != 0)
+ 			kfree(buckets);
+ 		else {
+@@ -787,7 +793,7 @@
+ 					NFS_INVALID_STABLE_HOW;
+ 			}
+ 		}
+-		spin_unlock(&cinfo->inode->i_lock);
++		my_bpf_spin_unlock(&cinfo->inode->i_lock, num_policy);
+ 		return 0;
+ 	}
+ }
+@@ -2158,6 +2164,7 @@
+ static int
+ ff_layout_prepare_layoutreturn(struct nfs4_layoutreturn_args *args)
+ {
++	extern int num_policy;
+ 	struct nfs4_flexfile_layoutreturn_args *ff_args;
+ 	struct nfs4_flexfile_layout *ff_layout = FF_LAYOUT_FROM_HDR(args->layout);
+ 
+@@ -2173,10 +2180,10 @@
+ 			&args->range, &ff_args->errors,
+ 			FF_LAYOUTRETURN_MAXERR);
+ 
+-	spin_lock(&args->inode->i_lock);
++	my_bpf_spin_lock(&args->inode->i_lock, num_policy);
+ 	ff_args->num_dev = ff_layout_mirror_prepare_stats(&ff_layout->generic_hdr,
+ 			&ff_args->devinfo[0], ARRAY_SIZE(ff_args->devinfo));
+-	spin_unlock(&args->inode->i_lock);
++	my_bpf_spin_unlock(&args->inode->i_lock, num_policy);
+ 
+ 	args->ld_private->ops = &layoutreturn_ops;
+ 	args->ld_private->data = ff_args;
+@@ -2454,6 +2461,7 @@
+ static int
+ ff_layout_prepare_layoutstats(struct nfs42_layoutstat_args *args)
+ {
++	extern int num_policy;
+ 	struct nfs4_flexfile_layout *ff_layout;
+ 	const int dev_count = PNFS_LAYOUTSTATS_MAXDEV;
+ 
+@@ -2462,11 +2470,11 @@
+ 	if (!args->devinfo)
+ 		return -ENOMEM;
+ 
+-	spin_lock(&args->inode->i_lock);
++	my_bpf_spin_lock(&args->inode->i_lock, num_policy);
+ 	ff_layout = FF_LAYOUT_FROM_HDR(NFS_I(args->inode)->layout);
+ 	args->num_dev = ff_layout_mirror_prepare_stats(&ff_layout->generic_hdr,
+ 			&args->devinfo[0], dev_count);
+-	spin_unlock(&args->inode->i_lock);
++	my_bpf_spin_unlock(&args->inode->i_lock, num_policy);
+ 	if (!args->num_dev) {
+ 		kfree(args->devinfo);
+ 		args->devinfo = NULL;
+diff -ruN SynCord-linux-base/fs/nfs/flexfilelayout/flexfilelayoutdev.c SynCord-linux-destination/fs/nfs/flexfilelayout/flexfilelayoutdev.c
+--- SynCord-linux-base/fs/nfs/flexfilelayout/flexfilelayoutdev.c	2023-09-04 14:55:43.175292998 +0000
++++ SynCord-linux-destination/fs/nfs/flexfilelayout/flexfilelayoutdev.c	2023-09-06 09:33:02.678502933 +0000
+@@ -11,6 +11,7 @@
+ #include <linux/vmalloc.h>
+ #include <linux/module.h>
+ #include <linux/sunrpc/addr.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include "../internal.h"
+ #include "../nfs4session.h"
+@@ -252,6 +253,7 @@
+ 			     u64 length, int status, enum nfs_opnum4 opnum,
+ 			     gfp_t gfp_flags)
+ {
++	extern int num_policy;
+ 	struct nfs4_ff_layout_ds_err *dserr;
+ 
+ 	if (status == 0)
+@@ -273,9 +275,9 @@
+ 	memcpy(&dserr->deviceid, &mirror->mirror_ds->id_node.deviceid,
+ 	       NFS4_DEVICEID4_SIZE);
+ 
+-	spin_lock(&flo->generic_hdr.plh_inode->i_lock);
++	my_bpf_spin_lock(&flo->generic_hdr.plh_inode->i_lock, num_policy);
+ 	ff_layout_add_ds_error_locked(flo, dserr);
+-	spin_unlock(&flo->generic_hdr.plh_inode->i_lock);
++	my_bpf_spin_unlock(&flo->generic_hdr.plh_inode->i_lock, num_policy);
+ 	return 0;
+ }
+ 
+@@ -508,12 +510,13 @@
+ 				      struct list_head *head,
+ 				      unsigned int maxnum)
+ {
++	extern int num_policy;
+ 	struct nfs4_flexfile_layout *flo = FF_LAYOUT_FROM_HDR(lo);
+ 	struct inode *inode = lo->plh_inode;
+ 	struct nfs4_ff_layout_ds_err *err, *n;
+ 	unsigned int ret = 0;
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	list_for_each_entry_safe(err, n, &flo->error_list, list) {
+ 		if (!pnfs_is_range_intersecting(err->offset,
+ 				pnfs_end_offset(err->offset, err->length),
+@@ -526,7 +529,7 @@
+ 		maxnum--;
+ 		ret++;
+ 	}
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	return ret;
+ }
+ 
+diff -ruN SynCord-linux-base/fs/nfs/getroot.c SynCord-linux-destination/fs/nfs/getroot.c
+--- SynCord-linux-base/fs/nfs/getroot.c	2023-09-04 14:55:43.175292998 +0000
++++ SynCord-linux-destination/fs/nfs/getroot.c	2023-09-06 09:33:02.446501991 +0000
+@@ -40,6 +40,7 @@
+ {
+ 	/* The mntroot acts as the dummy root dentry for this superblock */
+ 	if (sb->s_root == NULL) {
++		extern int num_policy;
+ 		sb->s_root = d_make_root(inode);
+ 		if (sb->s_root == NULL)
+ 			return -ENOMEM;
+@@ -52,11 +53,11 @@
+ 		 * This again causes shrink_dcache_for_umount_subtree() to
+ 		 * Oops, since the test for IS_ROOT() will fail.
+ 		 */
+-		spin_lock(&d_inode(sb->s_root)->i_lock);
++		my_bpf_spin_lock(&d_inode(sb->s_root)->i_lock, num_policy);
+ 		spin_lock(&sb->s_root->d_lock);
+ 		hlist_del_init(&sb->s_root->d_u.d_alias);
+ 		spin_unlock(&sb->s_root->d_lock);
+-		spin_unlock(&d_inode(sb->s_root)->i_lock);
++		my_bpf_spin_unlock(&d_inode(sb->s_root)->i_lock, num_policy);
+ 	}
+ 	return 0;
+ }
+diff -ruN SynCord-linux-base/fs/nfs/inode.c SynCord-linux-destination/fs/nfs/inode.c
+--- SynCord-linux-base/fs/nfs/inode.c	2023-09-04 14:55:43.179292993 +0000
++++ SynCord-linux-destination/fs/nfs/inode.c	2023-09-06 09:33:02.806503452 +0000
+@@ -41,6 +41,7 @@
+ #include <linux/freezer.h>
+ #include <linux/uaccess.h>
+ #include <linux/iversion.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include "nfs4_fs.h"
+ #include "callback.h"
+@@ -245,38 +246,42 @@
+ 
+ void nfs_zap_caches(struct inode *inode)
+ {
+-	spin_lock(&inode->i_lock);
++	extern int num_policy;
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	nfs_zap_caches_locked(inode);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ }
+ 
+ void nfs_zap_mapping(struct inode *inode, struct address_space *mapping)
+ {
+ 	if (mapping->nrpages != 0) {
+-		spin_lock(&inode->i_lock);
++		extern int num_policy;
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		nfs_set_cache_invalid(inode, NFS_INO_INVALID_DATA);
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	}
+ }
+ 
+ void nfs_zap_acl_cache(struct inode *inode)
+ {
++	extern int num_policy;
+ 	void (*clear_acl_cache)(struct inode *);
+ 
+ 	clear_acl_cache = NFS_PROTO(inode)->clear_acl_cache;
+ 	if (clear_acl_cache != NULL)
+ 		clear_acl_cache(inode);
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	NFS_I(inode)->cache_validity &= ~NFS_INO_INVALID_ACL;
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ }
+ EXPORT_SYMBOL_GPL(nfs_zap_acl_cache);
+ 
+ void nfs_invalidate_atime(struct inode *inode)
+ {
+-	spin_lock(&inode->i_lock);
++	extern int num_policy;
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	nfs_set_cache_invalid(inode, NFS_INO_INVALID_ATIME);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ }
+ EXPORT_SYMBOL_GPL(nfs_invalidate_atime);
+ 
+@@ -334,9 +339,10 @@
+ #ifdef CONFIG_NFS_V4_SECURITY_LABEL
+ static void nfs_clear_label_invalid(struct inode *inode)
+ {
+-	spin_lock(&inode->i_lock);
++	extern int num_policy;
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	NFS_I(inode)->cache_validity &= ~NFS_INO_INVALID_LABEL;
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ }
+ 
+ void nfs_setsecurity(struct inode *inode, struct nfs_fattr *fattr,
+@@ -644,6 +650,7 @@
+  */
+ static int nfs_vmtruncate(struct inode * inode, loff_t offset)
+ {
++	extern int num_policy;
+ 	int err;
+ 
+ 	err = inode_newsize_ok(inode, offset);
+@@ -657,9 +664,9 @@
+ 				NFS_INO_DATA_INVAL_DEFER);
+ 	NFS_I(inode)->cache_validity &= ~NFS_INO_INVALID_SIZE;
+ 
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	truncate_pagecache(inode, offset);
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ out:
+ 	return err;
+ }
+@@ -676,10 +683,11 @@
+ void nfs_setattr_update_inode(struct inode *inode, struct iattr *attr,
+ 		struct nfs_fattr *fattr)
+ {
++	extern int num_policy;
+ 	/* Barrier: bump the attribute generation count. */
+ 	nfs_fattr_set_barrier(fattr);
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	NFS_I(inode)->attr_gencount = fattr->gencount;
+ 	if ((attr->ia_valid & ATTR_SIZE) != 0) {
+ 		nfs_set_cache_invalid(inode, NFS_INO_INVALID_MTIME);
+@@ -739,7 +747,7 @@
+ 	}
+ 	if (fattr->valid)
+ 		nfs_update_inode(inode, fattr);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ }
+ EXPORT_SYMBOL_GPL(nfs_setattr_update_inode);
+ 
+@@ -881,11 +889,12 @@
+ 	res = __nfs_find_lock_context(ctx);
+ 	rcu_read_unlock();
+ 	if (res == NULL) {
++		extern int num_policy;
+ 		new = kmalloc(sizeof(*new), GFP_KERNEL);
+ 		if (new == NULL)
+ 			return ERR_PTR(-ENOMEM);
+ 		nfs_init_lock_context(new);
+-		spin_lock(&inode->i_lock);
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		res = __nfs_find_lock_context(ctx);
+ 		if (res == NULL) {
+ 			new->open_context = get_nfs_open_context(ctx);
+@@ -897,7 +906,7 @@
+ 			} else
+ 				res = ERR_PTR(-EBADF);
+ 		}
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		kfree(new);
+ 	}
+ 	return res;
+@@ -906,13 +915,14 @@
+ 
+ void nfs_put_lock_context(struct nfs_lock_context *l_ctx)
+ {
++	extern int num_policy;
+ 	struct nfs_open_context *ctx = l_ctx->open_context;
+ 	struct inode *inode = d_inode(ctx->dentry);
+ 
+ 	if (!refcount_dec_and_lock(&l_ctx->count, &inode->i_lock))
+ 		return;
+ 	list_del_rcu(&l_ctx->list);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	put_nfs_open_context(ctx);
+ 	kfree_rcu(l_ctx, rcu_head);
+ }
+@@ -999,9 +1009,10 @@
+ 	if (!refcount_dec_and_test(&ctx->lock_context.count))
+ 		return;
+ 	if (!list_empty(&ctx->list)) {
+-		spin_lock(&inode->i_lock);
++		extern int num_policy;
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		list_del_rcu(&ctx->list);
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	}
+ 	if (inode != NULL)
+ 		NFS_PROTO(inode)->close_context(ctx, is_sync);
+@@ -1030,16 +1041,17 @@
+  */
+ void nfs_inode_attach_open_context(struct nfs_open_context *ctx)
+ {
++	extern int num_policy;
+ 	struct inode *inode = d_inode(ctx->dentry);
+ 	struct nfs_inode *nfsi = NFS_I(inode);
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	if (list_empty(&nfsi->open_files) &&
+ 	    (nfsi->cache_validity & NFS_INO_DATA_INVAL_DEFER))
+ 		nfsi->cache_validity |= NFS_INO_INVALID_DATA |
+ 			NFS_INO_REVAL_FORCED;
+ 	list_add_tail_rcu(&ctx->list, &nfsi->open_files);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ }
+ EXPORT_SYMBOL_GPL(nfs_inode_attach_open_context);
+ 
+@@ -1227,9 +1239,10 @@
+ 			return ret;
+ 	}
+ 	if (S_ISDIR(inode->i_mode)) {
+-		spin_lock(&inode->i_lock);
++		extern int num_policy;
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		memset(nfsi->cookieverf, 0, sizeof(nfsi->cookieverf));
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	}
+ 	nfs_inc_stats(inode, NFSIOS_DATAINVALIDATE);
+ 	nfs_fscache_wait_on_invalidate(inode);
+@@ -1248,6 +1261,7 @@
+ 
+ int nfs_revalidate_mapping_rcu(struct inode *inode)
+ {
++	extern int num_policy;
+ 	struct nfs_inode *nfsi = NFS_I(inode);
+ 	unsigned long *bitlock = &nfsi->flags;
+ 	int ret = 0;
+@@ -1258,11 +1272,11 @@
+ 		ret = -ECHILD;
+ 		goto out;
+ 	}
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	if (test_bit(NFS_INO_INVALIDATING, bitlock) ||
+ 	    (nfsi->cache_validity & NFS_INO_INVALID_DATA))
+ 		ret = -ECHILD;
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ out:
+ 	return ret;
+ }
+@@ -1275,6 +1289,7 @@
+ int nfs_revalidate_mapping(struct inode *inode,
+ 		struct address_space *mapping)
+ {
++	extern int num_policy;
+ 	struct nfs_inode *nfsi = NFS_I(inode);
+ 	unsigned long *bitlock = &nfsi->flags;
+ 	int ret = 0;
+@@ -1302,18 +1317,20 @@
+ 	 * the bit lock here if it looks like we're going to be doing that.
+ 	 */
+ 	for (;;) {
++		extern int num_policy;
+ 		ret = wait_on_bit_action(bitlock, NFS_INO_INVALIDATING,
+ 					 nfs_wait_bit_killable, TASK_KILLABLE);
+ 		if (ret)
+ 			goto out;
+-		spin_lock(&inode->i_lock);
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		if (test_bit(NFS_INO_INVALIDATING, bitlock)) {
+-			spin_unlock(&inode->i_lock);
++			extern int num_policy;
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			continue;
+ 		}
+ 		if (nfsi->cache_validity & NFS_INO_INVALID_DATA)
+ 			break;
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		goto out;
+ 	}
+ 
+@@ -1321,7 +1338,7 @@
+ 	smp_wmb();
+ 	nfsi->cache_validity &= ~(NFS_INO_INVALID_DATA|
+ 			NFS_INO_DATA_INVAL_DEFER);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	trace_nfs_invalidate_mapping_enter(inode);
+ 	ret = nfs_invalidate_mapping(inode, mapping);
+ 	trace_nfs_invalidate_mapping_exit(inode, ret);
+@@ -1649,13 +1666,14 @@
+  */
+ int nfs_refresh_inode(struct inode *inode, struct nfs_fattr *fattr)
+ {
++	extern int num_policy;
+ 	int status;
+ 
+ 	if ((fattr->valid & NFS_ATTR_FATTR) == 0)
+ 		return 0;
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	status = nfs_refresh_inode_locked(inode, fattr);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 
+ 	return status;
+ }
+@@ -1688,15 +1706,16 @@
+  */
+ int nfs_post_op_update_inode(struct inode *inode, struct nfs_fattr *fattr)
+ {
++	extern int num_policy;
+ 	int status;
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	nfs_fattr_set_barrier(fattr);
+ 	status = nfs_post_op_update_inode_locked(inode, fattr,
+ 			NFS_INO_INVALID_CHANGE
+ 			| NFS_INO_INVALID_CTIME
+ 			| NFS_INO_REVAL_FORCED);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 
+ 	return status;
+ }
+@@ -1767,12 +1786,13 @@
+  */
+ int nfs_post_op_update_inode_force_wcc(struct inode *inode, struct nfs_fattr *fattr)
+ {
++	extern int num_policy;
+ 	int status;
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	nfs_fattr_set_barrier(fattr);
+ 	status = nfs_post_op_update_inode_force_wcc_locked(inode, fattr);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	return status;
+ }
+ EXPORT_SYMBOL_GPL(nfs_post_op_update_inode_force_wcc);
+diff -ruN SynCord-linux-base/fs/nfs/nfs42proc.c SynCord-linux-destination/fs/nfs/nfs42proc.c
+--- SynCord-linux-base/fs/nfs/nfs42proc.c	2023-09-04 14:55:43.179292993 +0000
++++ SynCord-linux-destination/fs/nfs/nfs42proc.c	2023-09-06 09:33:02.642502787 +0000
+@@ -15,6 +15,7 @@
+ #include "pnfs.h"
+ #include "nfs4session.h"
+ #include "internal.h"
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #define NFSDBG_FACILITY NFSDBG_PROC
+ static int nfs42_do_offload_cancel_async(struct file *dst, nfs4_stateid *std);
+@@ -534,20 +535,21 @@
+ static void
+ nfs42_layoutstat_prepare(struct rpc_task *task, void *calldata)
+ {
++	extern int num_policy;
+ 	struct nfs42_layoutstat_data *data = calldata;
+ 	struct inode *inode = data->inode;
+ 	struct nfs_server *server = NFS_SERVER(inode);
+ 	struct pnfs_layout_hdr *lo;
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	lo = NFS_I(inode)->layout;
+ 	if (!pnfs_layout_is_valid(lo)) {
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		rpc_exit(task, 0);
+ 		return;
+ 	}
+ 	nfs4_stateid_copy(&data->args.stateid, &lo->plh_stateid);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	nfs4_setup_sequence(server->nfs_client, &data->args.seq_args,
+ 			    &data->res.seq_res, task);
+ }
+@@ -579,6 +581,7 @@
+ 		if (pnfs_layout_is_valid(lo) &&
+ 		    nfs4_stateid_match(&data->args.stateid,
+ 					     &lo->plh_stateid)) {
++			extern int num_policy;
+ 			LIST_HEAD(head);
+ 
+ 			/*
+@@ -586,7 +589,7 @@
+ 			 * with the current stateid.
+ 			 */
+ 			pnfs_mark_layout_stateid_invalid(lo, &head);
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			pnfs_free_lseg_list(&head);
+ 			nfs_commit_inode(inode, 0);
+ 		} else
+@@ -700,22 +703,23 @@
+ static void
+ nfs42_layouterror_prepare(struct rpc_task *task, void *calldata)
+ {
++	extern int num_policy;
+ 	struct nfs42_layouterror_data *data = calldata;
+ 	struct inode *inode = data->inode;
+ 	struct nfs_server *server = NFS_SERVER(inode);
+ 	struct pnfs_layout_hdr *lo = data->lseg->pls_layout;
+ 	unsigned i;
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	if (!pnfs_layout_is_valid(lo)) {
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		rpc_exit(task, 0);
+ 		return;
+ 	}
+ 	for (i = 0; i < data->args.num_errors; i++)
+ 		nfs4_stateid_copy(&data->args.errors[i].stateid,
+ 				&lo->plh_stateid);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	nfs4_setup_sequence(server->nfs_client, &data->args.seq_args,
+ 			    &data->res.seq_res, task);
+ }
+@@ -746,6 +750,7 @@
+ 		if (pnfs_layout_is_valid(lo) &&
+ 		    nfs4_stateid_match(&data->args.errors[0].stateid,
+ 					     &lo->plh_stateid)) {
++			extern int num_policy;
+ 			LIST_HEAD(head);
+ 
+ 			/*
+@@ -753,7 +758,7 @@
+ 			 * with the current stateid.
+ 			 */
+ 			pnfs_mark_layout_stateid_invalid(lo, &head);
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			pnfs_free_lseg_list(&head);
+ 			nfs_commit_inode(inode, 0);
+ 		} else
+diff -ruN SynCord-linux-base/fs/nfs/nfs4proc.c SynCord-linux-destination/fs/nfs/nfs4proc.c
+--- SynCord-linux-base/fs/nfs/nfs4proc.c	2023-09-04 14:55:43.179292993 +0000
++++ SynCord-linux-destination/fs/nfs/nfs4proc.c	2023-09-06 09:33:03.822507585 +0000
+@@ -55,6 +55,7 @@
+ #include <linux/utsname.h>
+ #include <linux/freezer.h>
+ #include <linux/iversion.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include "nfs4_fs.h"
+ #include "delegation.h"
+@@ -1164,9 +1165,10 @@
+ update_changeattr(struct inode *dir, struct nfs4_change_info *cinfo,
+ 		unsigned long timestamp, unsigned long cache_validity)
+ {
+-	spin_lock(&dir->i_lock);
++	extern int num_policy;
++	my_bpf_spin_lock(&dir->i_lock, num_policy);
+ 	update_changeattr_locked(dir, cinfo, timestamp, cache_validity);
+-	spin_unlock(&dir->i_lock);
++	my_bpf_spin_unlock(&dir->i_lock, num_policy);
+ }
+ 
+ struct nfs4_open_createattrs {
+@@ -4469,12 +4471,13 @@
+ 
+ 	status = nfs4_call_sync(server->client, server, &msg, &args.seq_args, &res.seq_res, 1);
+ 	if (status == 0) {
+-		spin_lock(&dir->i_lock);
++		extern int num_policy;
++		my_bpf_spin_lock(&dir->i_lock, num_policy);
+ 		update_changeattr_locked(dir, &res.cinfo, timestamp, 0);
+ 		/* Removing a directory decrements nlink in the parent */
+ 		if (ftype == NF4DIR && dir->i_nlink > 2)
+ 			nfs4_dec_nlink_locked(dir);
+-		spin_unlock(&dir->i_lock);
++		my_bpf_spin_unlock(&dir->i_lock, num_policy);
+ 	}
+ 	return status;
+ }
+@@ -4726,13 +4729,14 @@
+ 	int status = nfs4_call_sync(NFS_SERVER(dir)->client, NFS_SERVER(dir), &data->msg,
+ 				    &data->arg.seq_args, &data->res.seq_res, 1);
+ 	if (status == 0) {
+-		spin_lock(&dir->i_lock);
++		extern int num_policy;
++		my_bpf_spin_lock(&dir->i_lock, num_policy);
+ 		update_changeattr_locked(dir, &data->res.dir_cinfo,
+ 				data->res.fattr->time_start, 0);
+ 		/* Creating a directory bumps nlink in the parent */
+ 		if (data->arg.ftype == NF4DIR)
+ 			nfs4_inc_nlink_locked(dir);
+-		spin_unlock(&dir->i_lock);
++		my_bpf_spin_unlock(&dir->i_lock, num_policy);
+ 		status = nfs_instantiate(dentry, data->res.fh, data->res.fattr, data->res.label);
+ 	}
+ 	return status;
+@@ -5501,12 +5505,13 @@
+ 
+ static void nfs4_set_cached_acl(struct inode *inode, struct nfs4_cached_acl *acl)
+ {
++	extern int num_policy;
+ 	struct nfs_inode *nfsi = NFS_I(inode);
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	kfree(nfsi->nfs4_acl);
+ 	nfsi->nfs4_acl = acl;
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ }
+ 
+ static void nfs4_zap_acl_attr(struct inode *inode)
+@@ -5516,11 +5521,12 @@
+ 
+ static inline ssize_t nfs4_read_cached_acl(struct inode *inode, char *buf, size_t buflen)
+ {
++	extern int num_policy;
+ 	struct nfs_inode *nfsi = NFS_I(inode);
+ 	struct nfs4_cached_acl *acl;
+ 	int ret = -ENOENT;
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	acl = nfsi->nfs4_acl;
+ 	if (acl == NULL)
+ 		goto out;
+@@ -5535,7 +5541,7 @@
+ out_len:
+ 	ret = acl->len;
+ out:
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	return ret;
+ }
+ 
+@@ -5678,6 +5684,7 @@
+ 
+ static int __nfs4_proc_set_acl(struct inode *inode, const void *buf, size_t buflen)
+ {
++	extern int num_policy;
+ 	struct nfs_server *server = NFS_SERVER(inode);
+ 	struct page *pages[NFS4ACL_MAXPAGES];
+ 	struct nfs_setaclargs arg = {
+@@ -5715,11 +5722,11 @@
+ 	 * Acl update can result in inode attribute update.
+ 	 * so mark the attribute cache invalid.
+ 	 */
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	NFS_I(inode)->cache_validity |= NFS_INO_INVALID_CHANGE
+ 		| NFS_INO_INVALID_CTIME
+ 		| NFS_INO_REVAL_FORCED;
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	nfs_access_zap_cache(inode);
+ 	nfs_zap_acl_cache(inode);
+ 	return ret;
+@@ -9026,7 +9033,8 @@
+ 		/* If the open stateid was bad, then recover it. */
+ 		if (!lo || test_bit(NFS_LAYOUT_INVALID_STID, &lo->plh_flags) ||
+ 		    !nfs4_stateid_match_other(&lgp->args.stateid, &lo->plh_stateid)) {
+-			spin_unlock(&inode->i_lock);
++			extern int num_policy;
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			exception->state = lgp->args.ctx->state;
+ 			exception->stateid = &lgp->args.stateid;
+ 			break;
+diff -ruN SynCord-linux-base/fs/nfs/nfs4state.c SynCord-linux-destination/fs/nfs/nfs4state.c
+--- SynCord-linux-base/fs/nfs/nfs4state.c	2023-09-04 14:55:43.179292993 +0000
++++ SynCord-linux-destination/fs/nfs/nfs4state.c	2023-09-06 09:33:02.670502900 +0000
+@@ -49,6 +49,7 @@
+ #include <linux/workqueue.h>
+ #include <linux/bitops.h>
+ #include <linux/jiffies.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <linux/sunrpc/clnt.h>
+ 
+@@ -719,6 +720,7 @@
+ struct nfs4_state *
+ nfs4_get_open_state(struct inode *inode, struct nfs4_state_owner *owner)
+ {
++	extern int num_policy;
+ 	struct nfs4_state *state, *new;
+ 	struct nfs_inode *nfsi = NFS_I(inode);
+ 
+@@ -729,7 +731,7 @@
+ 		goto out;
+ 	new = nfs4_alloc_open_state();
+ 	spin_lock(&owner->so_lock);
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	state = __nfs4_find_state_byowner(inode, owner);
+ 	if (state == NULL && new != NULL) {
+ 		state = new;
+@@ -738,13 +740,13 @@
+ 		list_add_rcu(&state->inode_states, &nfsi->open_states);
+ 		ihold(inode);
+ 		state->inode = inode;
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		/* Note: The reclaim code dictates that we add stateless
+ 		 * and read-only stateids to the end of the list */
+ 		list_add_tail(&state->open_states, &owner->so_states);
+ 		spin_unlock(&owner->so_lock);
+ 	} else {
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		spin_unlock(&owner->so_lock);
+ 		if (new)
+ 			nfs4_free_open_state(new);
+@@ -755,15 +757,16 @@
+ 
+ void nfs4_put_open_state(struct nfs4_state *state)
+ {
++	extern int num_policy;
+ 	struct inode *inode = state->inode;
+ 	struct nfs4_state_owner *owner = state->owner;
+ 
+ 	if (!refcount_dec_and_lock(&state->count, &owner->so_lock))
+ 		return;
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	list_del_rcu(&state->inode_states);
+ 	list_del(&state->open_states);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	spin_unlock(&owner->so_lock);
+ 	iput(inode);
+ 	nfs4_free_open_state(state);
+diff -ruN SynCord-linux-base/fs/nfs/nfs4xdr.c SynCord-linux-destination/fs/nfs/nfs4xdr.c
+--- SynCord-linux-base/fs/nfs/nfs4xdr.c	2023-09-04 14:55:43.179292993 +0000
++++ SynCord-linux-destination/fs/nfs/nfs4xdr.c	2023-09-06 09:33:03.378505777 +0000
+@@ -52,6 +52,7 @@
+ #include <linux/nfs.h>
+ #include <linux/nfs4.h>
+ #include <linux/nfs_fs.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include "nfs4_fs.h"
+ #include "nfs4trace.h"
+@@ -2035,6 +2036,7 @@
+ 		    const struct nfs4_layoutreturn_args *args,
+ 		    struct compound_hdr *hdr)
+ {
++	extern int num_policy;
+ 	__be32 *p;
+ 
+ 	encode_op_hdr(xdr, OP_LAYOUTRETURN, decode_layoutreturn_maxsz, hdr);
+@@ -2046,9 +2048,9 @@
+ 	p = reserve_space(xdr, 16);
+ 	p = xdr_encode_hyper(p, args->range.offset);
+ 	p = xdr_encode_hyper(p, args->range.length);
+-	spin_lock(&args->inode->i_lock);
++	my_bpf_spin_lock(&args->inode->i_lock, num_policy);
+ 	encode_nfs4_stateid(xdr, &args->stateid);
+-	spin_unlock(&args->inode->i_lock);
++	my_bpf_spin_unlock(&args->inode->i_lock, num_policy);
+ 	if (args->ld_private->ops && args->ld_private->ops->encode)
+ 		args->ld_private->ops->encode(xdr, args, args->ld_private);
+ 	else
+diff -ruN SynCord-linux-base/fs/nfs/pnfs.c SynCord-linux-destination/fs/nfs/pnfs.c
+--- SynCord-linux-base/fs/nfs/pnfs.c	2023-09-04 14:55:43.183292986 +0000
++++ SynCord-linux-destination/fs/nfs/pnfs.c	2023-09-06 09:33:02.370501683 +0000
+@@ -38,6 +38,7 @@
+ #include "delegation.h"
+ #include "nfs42.h"
+ #include "nfs4_fs.h"
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #define NFSDBG_FACILITY		NFSDBG_PNFS
+ #define PNFS_LAYOUTGET_RETRY_TIMEOUT (120*HZ)
+diff -ruN SynCord-linux-base/fs/nfs/unlink.c SynCord-linux-destination/fs/nfs/unlink.c
+--- SynCord-linux-base/fs/nfs/unlink.c	2023-09-04 14:55:43.183292986 +0000
++++ SynCord-linux-destination/fs/nfs/unlink.c	2023-09-06 09:33:02.614502673 +0000
+@@ -16,6 +16,7 @@
+ #include <linux/wait.h>
+ #include <linux/namei.h>
+ #include <linux/fsnotify.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include "internal.h"
+ #include "nfs4_fs.h"
+@@ -288,13 +289,15 @@
+ 	/* The result of the rename is unknown. Play it safe by
+ 	 * forcing a new lookup */
+ 	if (data->cancelled) {
+-		spin_lock(&data->old_dir->i_lock);
++		extern int num_policy;
++		my_bpf_spin_lock(&data->old_dir->i_lock, num_policy);
+ 		nfs_force_lookup_revalidate(data->old_dir);
+-		spin_unlock(&data->old_dir->i_lock);
++		my_bpf_spin_unlock(&data->old_dir->i_lock, num_policy);
+ 		if (data->new_dir != data->old_dir) {
+-			spin_lock(&data->new_dir->i_lock);
++			extern int num_policy;
++			my_bpf_spin_lock(&data->new_dir->i_lock, num_policy);
+ 			nfs_force_lookup_revalidate(data->new_dir);
+-			spin_unlock(&data->new_dir->i_lock);
++			my_bpf_spin_unlock(&data->new_dir->i_lock, num_policy);
+ 		}
+ 	}
+ 
+diff -ruN SynCord-linux-base/fs/nfs/write.c SynCord-linux-destination/fs/nfs/write.c
+--- SynCord-linux-base/fs/nfs/write.c	2023-09-04 14:55:43.183292986 +0000
++++ SynCord-linux-destination/fs/nfs/write.c	2023-09-06 09:33:02.622502705 +0000
+@@ -15,6 +15,7 @@
+ #include <linux/writeback.h>
+ #include <linux/swap.h>
+ #include <linux/migrate.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <linux/sunrpc/clnt.h>
+ #include <linux/nfs_fs.h>
+@@ -221,11 +222,12 @@
+ /* Adjust the file length if we're writing beyond the end */
+ static void nfs_grow_file(struct page *page, unsigned int offset, unsigned int count)
+ {
++	extern int num_policy;
+ 	struct inode *inode = page_file_mapping(page)->host;
+ 	loff_t end, i_size;
+ 	pgoff_t end_index;
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	i_size = i_size_read(inode);
+ 	end_index = (i_size - 1) >> PAGE_SHIFT;
+ 	if (i_size > 0 && page_index(page) < end_index)
+@@ -237,7 +239,7 @@
+ 	NFS_I(inode)->cache_validity &= ~NFS_INO_INVALID_SIZE;
+ 	nfs_inc_stats(inode, NFSIOS_EXTENDWRITE);
+ out:
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ }
+ 
+ /* A writeback failed: mark the page as bad, and invalidate the page cache */
+@@ -1537,13 +1539,14 @@
+ 
+ void nfs_writeback_update_inode(struct nfs_pgio_header *hdr)
+ {
++	extern int num_policy;
+ 	struct nfs_fattr *fattr = &hdr->fattr;
+ 	struct inode *inode = hdr->inode;
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	nfs_writeback_check_extend(hdr, fattr);
+ 	nfs_post_op_update_inode_force_wcc_locked(inode, fattr);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ }
+ EXPORT_SYMBOL_GPL(nfs_writeback_update_inode);
+ 
+@@ -1595,9 +1598,10 @@
+ 
+ 	/* Deal with the suid/sgid bit corner case */
+ 	if (nfs_should_remove_suid(inode)) {
+-		spin_lock(&inode->i_lock);
++		extern int num_policy;
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		NFS_I(inode)->cache_validity |= NFS_INO_INVALID_OTHER;
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	}
+ 	return 0;
+ }
+diff -ruN SynCord-linux-base/fs/notify/fsnotify.c SynCord-linux-destination/fs/notify/fsnotify.c
+--- SynCord-linux-base/fs/notify/fsnotify.c	2023-09-04 14:55:43.183292986 +0000
++++ SynCord-linux-destination/fs/notify/fsnotify.c	2023-09-06 09:33:01.830499498 +0000
+@@ -10,6 +10,7 @@
+ #include <linux/module.h>
+ #include <linux/mount.h>
+ #include <linux/srcu.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <linux/fsnotify_backend.h>
+ #include "fsnotify.h"
+@@ -41,14 +42,15 @@
+ 
+ 	spin_lock(&sb->s_inode_list_lock);
+ 	list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
++		extern int num_policy;
+ 		/*
+ 		 * We cannot __iget() an inode in state I_FREEING,
+ 		 * I_WILL_FREE, or I_NEW which is fine because by that point
+ 		 * the inode cannot have any associated watches.
+ 		 */
+-		spin_lock(&inode->i_lock);
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		if (inode->i_state & (I_FREEING|I_WILL_FREE|I_NEW)) {
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			continue;
+ 		}
+ 
+@@ -59,12 +61,12 @@
+ 		 * unnecessarily violent and may in fact be illegal to do.
+ 		 */
+ 		if (!atomic_read(&inode->i_count)) {
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			continue;
+ 		}
+ 
+ 		__iget(inode);
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		spin_unlock(&sb->s_inode_list_lock);
+ 
+ 		if (iput_inode)
+@@ -103,6 +105,7 @@
+  */
+ void __fsnotify_update_child_dentry_flags(struct inode *inode)
+ {
++	extern int num_policy;
+ 	struct dentry *alias;
+ 	int watched;
+ 
+@@ -112,7 +115,7 @@
+ 	/* determine if the children should tell inode about their events */
+ 	watched = fsnotify_inode_watches_children(inode);
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	/* run all of the dentries associated with this inode.  Since this is a
+ 	 * directory, there damn well better only be one item on this list */
+ 	hlist_for_each_entry(alias, &inode->i_dentry, d_u.d_alias) {
+@@ -135,7 +138,7 @@
+ 		}
+ 		spin_unlock(&alias->d_lock);
+ 	}
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ }
+ 
+ /* Notify this dentry's parent about a child's events. */
+diff -ruN SynCord-linux-base/fs/ocfs2/dcache.c SynCord-linux-destination/fs/ocfs2/dcache.c
+--- SynCord-linux-base/fs/ocfs2/dcache.c	2023-09-04 14:55:43.183292986 +0000
++++ SynCord-linux-destination/fs/ocfs2/dcache.c	2023-09-06 09:33:02.954504052 +0000
+@@ -13,6 +13,7 @@
+ #include <linux/types.h>
+ #include <linux/slab.h>
+ #include <linux/namei.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <cluster/masklog.h>
+ 
+@@ -155,9 +156,10 @@
+ 				      u64 parent_blkno,
+ 				      int skip_unhashed)
+ {
++	extern int num_policy;
+ 	struct dentry *dentry;
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	hlist_for_each_entry(dentry, &inode->i_dentry, d_u.d_alias) {
+ 		spin_lock(&dentry->d_lock);
+ 		if (ocfs2_match_dentry(dentry, parent_blkno, skip_unhashed)) {
+@@ -166,12 +168,12 @@
+ 
+ 			dget_dlock(dentry);
+ 			spin_unlock(&dentry->d_lock);
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			return dentry;
+ 		}
+ 		spin_unlock(&dentry->d_lock);
+ 	}
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	return NULL;
+ }
+ 
+diff -ruN SynCord-linux-base/fs/ocfs2/inode.c SynCord-linux-destination/fs/ocfs2/inode.c
+--- SynCord-linux-base/fs/ocfs2/inode.c	2023-09-04 14:55:43.183292986 +0000
++++ SynCord-linux-destination/fs/ocfs2/inode.c	2023-09-06 09:33:02.966504100 +0000
+@@ -15,6 +15,7 @@
+ #include <linux/pagemap.h>
+ #include <linux/quotaops.h>
+ #include <linux/iversion.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <asm/byteorder.h>
+ 
+@@ -1227,6 +1228,7 @@
+  * and to manipulate i_nlink without any other locks. */
+ int ocfs2_drop_inode(struct inode *inode)
+ {
++	extern int num_policy;
+ 	struct ocfs2_inode_info *oi = OCFS2_I(inode);
+ 
+ 	trace_ocfs2_drop_inode((unsigned long long)oi->ip_blkno,
+@@ -1234,9 +1236,9 @@
+ 
+ 	assert_spin_locked(&inode->i_lock);
+ 	inode->i_state |= I_WILL_FREE;
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	write_inode_now(inode, 1);
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	WARN_ON(inode->i_state & I_NEW);
+ 	inode->i_state &= ~I_WILL_FREE;
+ 
+diff -ruN SynCord-linux-base/fs/orangefs/file.c SynCord-linux-destination/fs/orangefs/file.c
+--- SynCord-linux-base/fs/orangefs/file.c	2023-09-04 14:55:43.183292986 +0000
++++ SynCord-linux-destination/fs/orangefs/file.c	2023-09-06 09:33:04.314509593 +0000
+@@ -15,6 +15,7 @@
+ #include "orangefs-bufmap.h"
+ #include <linux/fs.h>
+ #include <linux/pagemap.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ static int flush_racache(struct inode *inode)
+ {
+@@ -268,29 +269,32 @@
+ 
+ int orangefs_revalidate_mapping(struct inode *inode)
+ {
++	extern int num_policy;
+ 	struct orangefs_inode_s *orangefs_inode = ORANGEFS_I(inode);
+ 	struct address_space *mapping = inode->i_mapping;
+ 	unsigned long *bitlock = &orangefs_inode->bitlock;
+ 	int ret;
+ 
+ 	while (1) {
++		extern int num_policy;
+ 		ret = wait_on_bit(bitlock, 1, TASK_KILLABLE);
+ 		if (ret)
+ 			return ret;
+-		spin_lock(&inode->i_lock);
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		if (test_bit(1, bitlock)) {
+-			spin_unlock(&inode->i_lock);
++			extern int num_policy;
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			continue;
+ 		}
+ 		if (!time_before(jiffies, orangefs_inode->mapping_time))
+ 			break;
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		return 0;
+ 	}
+ 
+ 	set_bit(1, bitlock);
+ 	smp_wmb();
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 
+ 	unmap_mapping_range(mapping, 0, 0, 0);
+ 	ret = filemap_write_and_wait(mapping);
+@@ -638,9 +642,10 @@
+ 	file->private_data = NULL;
+ 
+ 	if (inode->i_state & I_DIRTY_TIME) {
+-		spin_lock(&inode->i_lock);
++		extern int num_policy;
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		inode->i_state &= ~I_DIRTY_TIME;
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		mark_inode_dirty_sync(inode);
+ 	}
+ 
+diff -ruN SynCord-linux-base/fs/orangefs/inode.c SynCord-linux-destination/fs/orangefs/inode.c
+--- SynCord-linux-base/fs/orangefs/inode.c	2023-09-04 14:55:43.183292986 +0000
++++ SynCord-linux-destination/fs/orangefs/inode.c	2023-09-06 09:33:04.342509707 +0000
+@@ -14,6 +14,7 @@
+ #include "protocol.h"
+ #include "orangefs-kernel.h"
+ #include "orangefs-bufmap.h"
++#include <linux/my_bpf_spin_lock.h>
+ 
+ static int orangefs_writepage_locked(struct page *page,
+     struct writeback_control *wbc)
+@@ -893,7 +894,8 @@
+ 		    gid_eq(ORANGEFS_I(inode)->attr_gid, current_fsgid())) {
+ 			ORANGEFS_I(inode)->attr_valid = iattr->ia_valid;
+ 		} else {
+-			spin_unlock(&inode->i_lock);
++			extern int num_policy;
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			write_inode_now(inode, 1);
+ 			goto again;
+ 		}
+diff -ruN SynCord-linux-base/fs/orangefs/orangefs-utils.c SynCord-linux-destination/fs/orangefs/orangefs-utils.c
+--- SynCord-linux-base/fs/orangefs/orangefs-utils.c	2023-09-04 14:55:43.183292986 +0000
++++ SynCord-linux-destination/fs/orangefs/orangefs-utils.c	2023-09-06 09:33:06.982520551 +0000
+@@ -10,6 +10,7 @@
+ #include "orangefs-kernel.h"
+ #include "orangefs-dev-proto.h"
+ #include "orangefs-bufmap.h"
++#include <linux/my_bpf_spin_lock.h>
+ 
+ __s32 fsid_of_op(struct orangefs_kernel_op_s *op)
+ {
+@@ -248,12 +249,14 @@
+ 	/* Must have all the attributes in the mask and be within cache time. */
+ 	if ((!flags && time_before(jiffies, orangefs_inode->getattr_time)) ||
+ 	    orangefs_inode->attr_valid || inode->i_state & I_DIRTY_PAGES) {
++		extern int num_policy;
+ 		if (orangefs_inode->attr_valid) {
+-			spin_unlock(&inode->i_lock);
++			extern int num_policy;
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			write_inode_now(inode, 1);
+ 			goto again;
+ 		}
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		return 0;
+ 	}
+ 	spin_unlock(&inode->i_lock);
+@@ -283,7 +286,8 @@
+ 	if ((!flags && time_before(jiffies, orangefs_inode->getattr_time)) ||
+ 	    orangefs_inode->attr_valid || inode->i_state & I_DIRTY_PAGES) {
+ 		if (orangefs_inode->attr_valid) {
+-			spin_unlock(&inode->i_lock);
++			extern int num_policy;
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			write_inode_now(inode, 1);
+ 			goto again2;
+ 		}
+@@ -416,6 +420,7 @@
+  */
+ int orangefs_inode_setattr(struct inode *inode)
+ {
++	extern int num_policy;
+ 	struct orangefs_inode_s *orangefs_inode = ORANGEFS_I(inode);
+ 	struct orangefs_kernel_op_s *new_op;
+ 	int ret;
+@@ -424,7 +429,7 @@
+ 	if (!new_op)
+ 		return -ENOMEM;
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	new_op->upcall.uid = from_kuid(&init_user_ns, orangefs_inode->attr_uid);
+ 	new_op->upcall.gid = from_kgid(&init_user_ns, orangefs_inode->attr_gid);
+ 	new_op->upcall.req.setattr.refn = orangefs_inode->refn;
+@@ -432,11 +437,11 @@
+ 	    &new_op->upcall.req.setattr.attributes);
+ 	orangefs_inode->attr_valid = 0;
+ 	if (!new_op->upcall.req.setattr.attributes.mask) {
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		op_release(new_op);
+ 		return 0;
+ 	}
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 
+ 	ret = service_operation(new_op, __func__,
+ 	    get_interruptible_flag(inode) | ORANGEFS_OP_WRITEBACK);
+diff -ruN SynCord-linux-base/fs/overlayfs/dir.c SynCord-linux-destination/fs/overlayfs/dir.c
+--- SynCord-linux-base/fs/overlayfs/dir.c	2023-09-04 14:55:43.183292986 +0000
++++ SynCord-linux-destination/fs/overlayfs/dir.c	2023-09-06 09:33:03.790507454 +0000
+@@ -15,6 +15,7 @@
+ #include <linux/atomic.h>
+ #include <linux/ratelimit.h>
+ #include "overlayfs.h"
++#include <linux/my_bpf_spin_lock.h>
+ 
+ static unsigned short ovl_redirect_max = 256;
+ module_param_named(redirect_max, ovl_redirect_max, ushort, 0644);
+@@ -586,6 +587,7 @@
+ static int ovl_create_object(struct dentry *dentry, int mode, dev_t rdev,
+ 			     const char *link)
+ {
++	extern int num_policy;
+ 	int err;
+ 	struct inode *inode;
+ 	struct ovl_cattr attr = {
+@@ -603,9 +605,9 @@
+ 	if (!inode)
+ 		goto out_drop_write;
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	inode->i_state |= I_CREATING;
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 
+ 	inode_init_owner(inode, dentry->d_parent->d_inode, mode);
+ 	attr.mode = inode->i_mode;
+diff -ruN SynCord-linux-base/fs/overlayfs/util.c SynCord-linux-destination/fs/overlayfs/util.c
+--- SynCord-linux-base/fs/overlayfs/util.c	2023-09-04 14:55:43.183292986 +0000
++++ SynCord-linux-destination/fs/overlayfs/util.c	2023-09-06 09:33:03.770507373 +0000
+@@ -14,6 +14,7 @@
+ #include <linux/namei.h>
+ #include <linux/ratelimit.h>
+ #include "overlayfs.h"
++#include <linux/my_bpf_spin_lock.h>
+ 
+ int ovl_want_write(struct dentry *dentry)
+ {
+@@ -624,15 +625,16 @@
+  */
+ bool ovl_inuse_trylock(struct dentry *dentry)
+ {
++	extern int num_policy;
+ 	struct inode *inode = d_inode(dentry);
+ 	bool locked = false;
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	if (!(inode->i_state & I_OVL_INUSE)) {
+ 		inode->i_state |= I_OVL_INUSE;
+ 		locked = true;
+ 	}
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 
+ 	return locked;
+ }
+@@ -640,23 +642,25 @@
+ void ovl_inuse_unlock(struct dentry *dentry)
+ {
+ 	if (dentry) {
++		extern int num_policy;
+ 		struct inode *inode = d_inode(dentry);
+ 
+-		spin_lock(&inode->i_lock);
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		WARN_ON(!(inode->i_state & I_OVL_INUSE));
+ 		inode->i_state &= ~I_OVL_INUSE;
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	}
+ }
+ 
+ bool ovl_is_inuse(struct dentry *dentry)
+ {
++	extern int num_policy;
+ 	struct inode *inode = d_inode(dentry);
+ 	bool inuse;
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	inuse = (inode->i_state & I_OVL_INUSE);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 
+ 	return inuse;
+ }
+diff -ruN SynCord-linux-base/fs/pipe.c SynCord-linux-destination/fs/pipe.c
+--- SynCord-linux-base/fs/pipe.c	2023-09-04 14:55:43.187292980 +0000
++++ SynCord-linux-destination/fs/pipe.c	2023-09-06 09:33:00.630494659 +0000
+@@ -24,6 +24,7 @@
+ #include <linux/syscalls.h>
+ #include <linux/fcntl.h>
+ #include <linux/memcontrol.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <linux/uaccess.h>
+ #include <asm/ioctls.h>
+@@ -569,14 +570,15 @@
+ 
+ static void put_pipe_info(struct inode *inode, struct pipe_inode_info *pipe)
+ {
++	extern int num_policy;
+ 	int kill = 0;
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	if (!--pipe->files) {
+ 		inode->i_pipe = NULL;
+ 		kill = 1;
+ 	}
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 
+ 	if (kill)
+ 		free_pipe_info(pipe);
+@@ -897,32 +899,37 @@
+ 
+ static int fifo_open(struct inode *inode, struct file *filp)
+ {
++	extern int num_policy;
++	extern int num_policy;
+ 	struct pipe_inode_info *pipe;
+ 	bool is_pipe = inode->i_sb->s_magic == PIPEFS_MAGIC;
+ 	int ret;
+ 
+ 	filp->f_version = 0;
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	if (inode->i_pipe) {
++		extern int num_policy;
+ 		pipe = inode->i_pipe;
+ 		pipe->files++;
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	} else {
+-		spin_unlock(&inode->i_lock);
++		extern int num_policy;
++		extern int num_policy;
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		pipe = alloc_pipe_info();
+ 		if (!pipe)
+ 			return -ENOMEM;
+ 		pipe->files = 1;
+-		spin_lock(&inode->i_lock);
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		if (unlikely(inode->i_pipe)) {
+ 			inode->i_pipe->files++;
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			free_pipe_info(pipe);
+ 			pipe = inode->i_pipe;
+ 		} else {
+ 			inode->i_pipe = pipe;
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		}
+ 	}
+ 	filp->private_data = pipe;
+diff -ruN SynCord-linux-base/fs/quota/dquot.c SynCord-linux-destination/fs/quota/dquot.c
+--- SynCord-linux-base/fs/quota/dquot.c	2023-09-04 14:55:43.187292980 +0000
++++ SynCord-linux-destination/fs/quota/dquot.c	2023-09-06 09:33:03.782507421 +0000
+@@ -79,6 +79,7 @@
+ #include <linux/capability.h>
+ #include <linux/quotaops.h>
+ #include "../internal.h" /* ugh */
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <linux/uaccess.h>
+ 
+@@ -954,15 +955,16 @@
+ 
+ 	spin_lock(&sb->s_inode_list_lock);
+ 	list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
+-		spin_lock(&inode->i_lock);
++		extern int num_policy;
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		if ((inode->i_state & (I_FREEING|I_WILL_FREE|I_NEW)) ||
+ 		    !atomic_read(&inode->i_writecount) ||
+ 		    !dqinit_needed(inode, type)) {
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			continue;
+ 		}
+ 		__iget(inode);
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		spin_unlock(&sb->s_inode_list_lock);
+ 
+ #ifdef CONFIG_QUOTA_DEBUG
+@@ -1512,13 +1514,14 @@
+ 			 */
+ 			rsv = inode_get_rsv_space(inode);
+ 			if (unlikely(rsv)) {
+-				spin_lock(&inode->i_lock);
++				extern int num_policy;
++				my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 				/* Get reservation again under proper lock */
+ 				rsv = __inode_get_rsv_space(inode);
+ 				spin_lock(&dquots[cnt]->dq_dqb_lock);
+ 				dquots[cnt]->dq_dqb.dqb_rsvspace += rsv;
+ 				spin_unlock(&dquots[cnt]->dq_dqb_lock);
+-				spin_unlock(&inode->i_lock);
++				my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			}
+ 		}
+ 	}
+@@ -1623,13 +1626,14 @@
+ 
+ static qsize_t inode_get_rsv_space(struct inode *inode)
+ {
++	extern int num_policy;
+ 	qsize_t ret;
+ 
+ 	if (!inode->i_sb->dq_op->get_reserved_space)
+ 		return 0;
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	ret = __inode_get_rsv_space(inode);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	return ret;
+ }
+ 
+@@ -1648,6 +1652,8 @@
+  */
+ int __dquot_alloc_space(struct inode *inode, qsize_t number, int flags)
+ {
++	extern int num_policy;
++	extern int num_policy;
+ 	int cnt, ret = 0, index;
+ 	struct dquot_warn warn[MAXQUOTAS];
+ 	int reserve = flags & DQUOT_SPACE_RESERVE;
+@@ -1655,9 +1661,10 @@
+ 
+ 	if (!dquot_active(inode)) {
+ 		if (reserve) {
+-			spin_lock(&inode->i_lock);
++			extern int num_policy;
++			my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 			*inode_reserved_space(inode) += number;
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		} else {
+ 			inode_add_bytes(inode, number);
+ 		}
+@@ -1669,7 +1676,7 @@
+ 
+ 	dquots = i_dquot(inode);
+ 	index = srcu_read_lock(&dquot_srcu);
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	for (cnt = 0; cnt < MAXQUOTAS; cnt++) {
+ 		if (!dquots[cnt])
+ 			continue;
+@@ -1681,6 +1688,7 @@
+ 					      &warn[cnt]);
+ 		}
+ 		if (ret) {
++			extern int num_policy;
+ 			/* Back out changes we already did */
+ 			for (cnt--; cnt >= 0; cnt--) {
+ 				if (!dquots[cnt])
+@@ -1693,7 +1701,7 @@
+ 					dquot_decr_space(dquots[cnt], number);
+ 				spin_unlock(&dquots[cnt]->dq_dqb_lock);
+ 			}
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			goto out_flush_warn;
+ 		}
+ 	}
+@@ -1701,7 +1709,7 @@
+ 		*inode_reserved_space(inode) += number;
+ 	else
+ 		__inode_add_bytes(inode, number);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 
+ 	if (reserve)
+ 		goto out_flush_warn;
+@@ -1719,6 +1727,7 @@
+  */
+ int dquot_alloc_inode(struct inode *inode)
+ {
++	extern int num_policy;
+ 	int cnt, ret = 0, index;
+ 	struct dquot_warn warn[MAXQUOTAS];
+ 	struct dquot * const *dquots;
+@@ -1730,7 +1739,7 @@
+ 
+ 	dquots = i_dquot(inode);
+ 	index = srcu_read_lock(&dquot_srcu);
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	for (cnt = 0; cnt < MAXQUOTAS; cnt++) {
+ 		if (!dquots[cnt])
+ 			continue;
+@@ -1749,7 +1758,7 @@
+ 	}
+ 
+ warn_put_all:
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	if (ret == 0)
+ 		mark_all_dquot_dirty(dquots);
+ 	srcu_read_unlock(&dquot_srcu, index);
+@@ -1763,20 +1772,22 @@
+  */
+ int dquot_claim_space_nodirty(struct inode *inode, qsize_t number)
+ {
++	extern int num_policy;
+ 	struct dquot **dquots;
+ 	int cnt, index;
+ 
+ 	if (!dquot_active(inode)) {
+-		spin_lock(&inode->i_lock);
++		extern int num_policy;
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		*inode_reserved_space(inode) -= number;
+ 		__inode_add_bytes(inode, number);
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		return 0;
+ 	}
+ 
+ 	dquots = i_dquot(inode);
+ 	index = srcu_read_lock(&dquot_srcu);
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	/* Claim reserved quotas to allocated quotas */
+ 	for (cnt = 0; cnt < MAXQUOTAS; cnt++) {
+ 		if (dquots[cnt]) {
+@@ -1793,7 +1804,7 @@
+ 	/* Update inode bytes */
+ 	*inode_reserved_space(inode) -= number;
+ 	__inode_add_bytes(inode, number);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	mark_all_dquot_dirty(dquots);
+ 	srcu_read_unlock(&dquot_srcu, index);
+ 	return 0;
+@@ -1805,20 +1816,22 @@
+  */
+ void dquot_reclaim_space_nodirty(struct inode *inode, qsize_t number)
+ {
++	extern int num_policy;
+ 	struct dquot **dquots;
+ 	int cnt, index;
+ 
+ 	if (!dquot_active(inode)) {
+-		spin_lock(&inode->i_lock);
++		extern int num_policy;
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		*inode_reserved_space(inode) += number;
+ 		__inode_sub_bytes(inode, number);
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		return;
+ 	}
+ 
+ 	dquots = i_dquot(inode);
+ 	index = srcu_read_lock(&dquot_srcu);
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	/* Claim reserved quotas to allocated quotas */
+ 	for (cnt = 0; cnt < MAXQUOTAS; cnt++) {
+ 		if (dquots[cnt]) {
+@@ -1835,7 +1848,7 @@
+ 	/* Update inode bytes */
+ 	*inode_reserved_space(inode) += number;
+ 	__inode_sub_bytes(inode, number);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	mark_all_dquot_dirty(dquots);
+ 	srcu_read_unlock(&dquot_srcu, index);
+ 	return;
+@@ -1847,6 +1860,8 @@
+  */
+ void __dquot_free_space(struct inode *inode, qsize_t number, int flags)
+ {
++	extern int num_policy;
++	extern int num_policy;
+ 	unsigned int cnt;
+ 	struct dquot_warn warn[MAXQUOTAS];
+ 	struct dquot **dquots;
+@@ -1854,9 +1869,10 @@
+ 
+ 	if (!dquot_active(inode)) {
+ 		if (reserve) {
+-			spin_lock(&inode->i_lock);
++			extern int num_policy;
++			my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 			*inode_reserved_space(inode) -= number;
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		} else {
+ 			inode_sub_bytes(inode, number);
+ 		}
+@@ -1865,7 +1881,7 @@
+ 
+ 	dquots = i_dquot(inode);
+ 	index = srcu_read_lock(&dquot_srcu);
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	for (cnt = 0; cnt < MAXQUOTAS; cnt++) {
+ 		int wtype;
+ 
+@@ -1886,7 +1902,7 @@
+ 		*inode_reserved_space(inode) -= number;
+ 	else
+ 		__inode_sub_bytes(inode, number);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 
+ 	if (reserve)
+ 		goto out_unlock;
+@@ -1902,6 +1918,7 @@
+  */
+ void dquot_free_inode(struct inode *inode)
+ {
++	extern int num_policy;
+ 	unsigned int cnt;
+ 	struct dquot_warn warn[MAXQUOTAS];
+ 	struct dquot * const *dquots;
+@@ -1912,7 +1929,7 @@
+ 
+ 	dquots = i_dquot(inode);
+ 	index = srcu_read_lock(&dquot_srcu);
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	for (cnt = 0; cnt < MAXQUOTAS; cnt++) {
+ 		int wtype;
+ 
+@@ -1926,7 +1943,7 @@
+ 		dquot_decr_inodes(dquots[cnt], 1);
+ 		spin_unlock(&dquots[cnt]->dq_dqb_lock);
+ 	}
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	mark_all_dquot_dirty(dquots);
+ 	srcu_read_unlock(&dquot_srcu, index);
+ 	flush_warnings(warn);
+@@ -1947,6 +1964,7 @@
+  */
+ int __dquot_transfer(struct inode *inode, struct dquot **transfer_to)
+ {
++	extern int num_policy;
+ 	qsize_t cur_space;
+ 	qsize_t rsv_space = 0;
+ 	qsize_t inode_usage = 1;
+@@ -1974,9 +1992,9 @@
+ 	}
+ 
+ 	spin_lock(&dq_data_lock);
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	if (IS_NOQUOTA(inode)) {	/* File without quota accounting? */
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		spin_unlock(&dq_data_lock);
+ 		return 0;
+ 	}
+@@ -2037,7 +2055,7 @@
+ 		}
+ 		i_dquot(inode)[cnt] = transfer_to[cnt];
+ 	}
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	spin_unlock(&dq_data_lock);
+ 
+ 	mark_all_dquot_dirty(transfer_from);
+@@ -2061,7 +2079,7 @@
+ 		dquot_free_reserved_space(transfer_to[cnt], rsv_space);
+ 		spin_unlock(&transfer_to[cnt]->dq_dqb_lock);
+ 	}
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	spin_unlock(&dq_data_lock);
+ 	flush_warnings(warn_to);
+ 	return ret;
+diff -ruN SynCord-linux-base/fs/stack.c SynCord-linux-destination/fs/stack.c
+--- SynCord-linux-base/fs/stack.c	2023-09-04 14:55:43.187292980 +0000
++++ SynCord-linux-destination/fs/stack.c	2023-09-06 09:33:00.070492408 +0000
+@@ -2,6 +2,7 @@
+ #include <linux/export.h>
+ #include <linux/fs.h>
+ #include <linux/fs_stack.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ /* does _NOT_ require i_mutex to be held.
+  *
+diff -ruN SynCord-linux-base/fs/stat.c SynCord-linux-destination/fs/stat.c
+--- SynCord-linux-base/fs/stat.c	2023-09-04 14:55:43.187292980 +0000
++++ SynCord-linux-destination/fs/stat.c	2023-09-06 09:33:00.278493244 +0000
+@@ -17,6 +17,7 @@
+ #include <linux/syscalls.h>
+ #include <linux/pagemap.h>
+ #include <linux/compat.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <linux/uaccess.h>
+ #include <asm/unistd.h>
+@@ -688,9 +689,10 @@
+ 
+ void inode_add_bytes(struct inode *inode, loff_t bytes)
+ {
+-	spin_lock(&inode->i_lock);
++	extern int num_policy;
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	__inode_add_bytes(inode, bytes);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ }
+ 
+ EXPORT_SYMBOL(inode_add_bytes);
+@@ -710,20 +712,22 @@
+ 
+ void inode_sub_bytes(struct inode *inode, loff_t bytes)
+ {
+-	spin_lock(&inode->i_lock);
++	extern int num_policy;
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	__inode_sub_bytes(inode, bytes);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ }
+ 
+ EXPORT_SYMBOL(inode_sub_bytes);
+ 
+ loff_t inode_get_bytes(struct inode *inode)
+ {
++	extern int num_policy;
+ 	loff_t ret;
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	ret = __inode_get_bytes(inode);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	return ret;
+ }
+ 
+diff -ruN SynCord-linux-base/fs/ufs/balloc.c SynCord-linux-destination/fs/ufs/balloc.c
+--- SynCord-linux-base/fs/ufs/balloc.c	2023-09-04 14:55:43.187292980 +0000
++++ SynCord-linux-destination/fs/ufs/balloc.c	2023-09-06 09:33:01.814499433 +0000
+@@ -18,6 +18,7 @@
+ #include <linux/bitops.h>
+ #include <linux/bio.h>
+ #include <asm/byteorder.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include "ufs_fs.h"
+ #include "ufs.h"
+@@ -493,15 +494,16 @@
+ 
+ static bool try_add_frags(struct inode *inode, unsigned frags)
+ {
++	extern int num_policy;
+ 	unsigned size = frags * i_blocksize(inode);
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	__inode_add_bytes(inode, size);
+ 	if (unlikely((u32)inode->i_blocks != inode->i_blocks)) {
+ 		__inode_sub_bytes(inode, size);
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		return false;
+ 	}
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	return true;
+ }
+ 
+diff -ruN SynCord-linux-base/fs/xfs/libxfs/xfs_trans_inode.c SynCord-linux-destination/fs/xfs/libxfs/xfs_trans_inode.c
+--- SynCord-linux-base/fs/xfs/libxfs/xfs_trans_inode.c	2023-09-04 14:55:43.187292980 +0000
++++ SynCord-linux-destination/fs/xfs/libxfs/xfs_trans_inode.c	2023-09-06 09:33:03.966508171 +0000
+@@ -12,6 +12,7 @@
+ #include "xfs_trans.h"
+ #include "xfs_trans_priv.h"
+ #include "xfs_inode_item.h"
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <linux/iversion.h>
+ 
+@@ -99,9 +100,10 @@
+ 	 * worst case.
+ 	 */
+ 	if (inode->i_state & (I_DIRTY_TIME | I_DIRTY_TIME_EXPIRED)) {
+-		spin_lock(&inode->i_lock);
++		extern int num_policy;
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		inode->i_state &= ~(I_DIRTY_TIME | I_DIRTY_TIME_EXPIRED);
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	}
+ 
+ 	/*
+diff -ruN SynCord-linux-base/include/linux/my_bpf_spin_lock.h SynCord-linux-destination/include/linux/my_bpf_spin_lock.h
+--- SynCord-linux-base/include/linux/my_bpf_spin_lock.h	1970-01-01 00:00:00.000000000 +0000
++++ SynCord-linux-destination/include/linux/my_bpf_spin_lock.h	2023-09-06 09:33:44.522687216 +0000
+@@ -0,0 +1,93 @@
++#ifndef MY_BPF_SPIN_H
++#define MY_BPF_SPIN_H
++#define bpf_arch_spin_lock(l,policy) bpf_queued_spin_lock(l,policy) 
++static inline void bpf_do_raw_spin_lock(raw_spinlock_t *lock, int policy) __acquires(lock)
++{
++	__acquire(lock);
++	bpf_arch_spin_lock(&lock->raw_lock,policy);
++	mmiowb_spin_lock();
++}
++#define bpf_do_raw_spin_lock_flags(lock, flags,policy) bpf_do_raw_spin_lock(lock,policy) 
++#define bpf_arch_spin_lock_flags(lock, flags,policy) bpf_arch_spin_lock(lock,policy) 
++static inline unsigned long bpf___raw_spin_lock_irqsave(raw_spinlock_t *lock, int policy)
++{
++	unsigned long flags;
++
++	local_irq_save(flags);
++	preempt_disable();
++	spin_acquire(&lock->dep_map, 0, 0, _RET_IP_);
++	/*
++	 * On lockdep we dont want the hand-coded irq-enable of
++	 * do_raw_spin_lock_flags() code, because lockdep assumes
++	 * that interrupts are not re-enabled during lock-acquire:
++	 */
++#ifdef CONFIG_LOCKDEP
++	bpf_do_raw_spin_lock(lock,policy);
++#else
++	bpf_do_raw_spin_lock_flags(lock, &flags,policy);
++#endif
++	return flags;
++}
++#define bpf__raw_spin_lock_irqsave(lock,policy) bpf___raw_spin_lock_irqsave(lock,policy) 
++#define bpf_raw_spin_lock_irqsave(lock, flags, policy)			\
++	do {						\
++		typecheck(unsigned long, flags);	\
++		flags =bpf__raw_spin_lock_irqsave(lock,policy);	\
++	} while (0)
++#define my_bpf_spin_lock_irqsave(lock, flags, policy)				\
++do {								\
++	bpf_raw_spin_lock_irqsave(spinlock_check(lock), flags,policy);	\
++} while (0)
++#define bpf_arch_spin_unlock(l,policy) bpf_queued_spin_unlock(l,policy) 
++static inline void bpf_do_raw_spin_unlock(raw_spinlock_t *lock, int policy) __releases(lock)
++{
++	mmiowb_spin_unlock();
++	bpf_arch_spin_unlock(&lock->raw_lock,policy);
++	__release(lock);
++}
++static inline void bpf___raw_spin_unlock_irqrestore(raw_spinlock_t *lock,
++					    unsigned long flags, int policy)
++{
++	spin_release(&lock->dep_map, 1, _RET_IP_);
++	bpf_do_raw_spin_unlock(lock,policy);
++	local_irq_restore(flags);
++	preempt_enable();
++}
++static void __lockfunc bpf__raw_spin_unlock_irqrestore(raw_spinlock_t *lock, unsigned long flags, int policy)
++{
++	bpf___raw_spin_unlock_irqrestore(lock, flags,policy);
++}
++#define bpf_raw_spin_unlock_irqrestore(lock, flags, policy)		\
++	do {							\
++		typecheck(unsigned long, flags);		\
++		bpf__raw_spin_unlock_irqrestore(lock, flags,policy);	\
++	} while (0)
++static __always_inline void my_bpf_spin_unlock_irqrestore(spinlock_t *lock, unsigned long flags, int policy)
++{
++	bpf_raw_spin_unlock_irqrestore(&lock->rlock, flags,policy);
++}
++static inline void bpf___raw_spin_lock(raw_spinlock_t *lock, int policy)
++{
++	preempt_disable();
++	spin_acquire(&lock->dep_map, 0, 0, _RET_IP_);
++	bpf_do_raw_spin_lock(lock,policy);
++}
++#define bpf__raw_spin_lock(lock,policy) bpf___raw_spin_lock(lock,policy) 
++#define bpf_raw_spin_lock(lock,policy) bpf__raw_spin_lock(lock,policy) 
++static __always_inline void my_bpf_spin_lock(spinlock_t *lock, int policy)
++{
++	bpf_raw_spin_lock(&lock->rlock,policy);
++}
++static inline void bpf___raw_spin_unlock(raw_spinlock_t *lock, int policy)
++{
++	spin_release(&lock->dep_map, 1, _RET_IP_);
++	bpf_do_raw_spin_unlock(lock,policy);
++	preempt_enable();
++}
++#define bpf__raw_spin_unlock(lock,policy) bpf___raw_spin_unlock(lock,policy) 
++#define bpf_raw_spin_unlock(lock,policy) bpf__raw_spin_unlock(lock,policy) 
++static __always_inline void my_bpf_spin_unlock(spinlock_t *lock, int policy)
++{
++	bpf_raw_spin_unlock(&lock->rlock,policy);
++}
++#endif
+\ No newline at end of file
+diff -ruN SynCord-linux-base/kernel/bpf/inode.c SynCord-linux-destination/kernel/bpf/inode.c
+--- SynCord-linux-base/kernel/bpf/inode.c	2023-09-05 14:02:59.719142199 +0000
++++ SynCord-linux-destination/kernel/bpf/inode.c	2023-09-06 09:30:33.586107115 +0000
+@@ -701,3 +701,76 @@
+ 	return ret;
+ }
+ fs_initcall(bpf_init);
++
++#include "kpatch-macros.h"
++#define MAX_POLICY 5
++
++static inline __u64 ptr_to_u64(const void *ptr)
++{
++    return (__u64) (unsigned long) ptr;
++}
++
++static void *get_pinned_bpf_obj(const char *pathname){
++	struct inode *inode;
++	struct path path;
++	void *raw;
++	int ret;
++
++	/* Let's get BPF prog 1 */
++	ret = kern_path(pathname, LOOKUP_FOLLOW, &path);
++	if (ret){
++		printk("[syncord] %s failed\n", pathname);
++		return ERR_PTR(ret);
++	}
++
++	inode = d_backing_inode(path.dentry);
++	ret = inode_permission(inode, ACC_MODE(2));
++	if(ret){
++		printk("[syncord] perm error\n");
++		path_put(&path);
++		return ERR_PTR(ret);
++	}
++
++	raw = bpf_any_get(inode->i_private, BPF_TYPE_PROG);
++	if(!IS_ERR(raw)){
++		touch_atime(&path);
++	}
++	else{
++		printk("[syncord] raw error\n");
++		path_put(&path);
++		return ERR_PTR(ret);
++	}
++
++	path_put(&path);
++	return raw;
++}
++
++static int pre_patch_callback(patch_object *obj)
++{
++	extern int num_policy;
++	extern void *bpf_prog_should_reorder[MAX_POLICY];
++
++	if(num_policy < 4)
++		num_policy++;
++	else
++		return -1;
++
++	bpf_prog_should_reorder[num_policy] = get_pinned_bpf_obj("/sys/fs/bpf/numa-grouping");
++	if(IS_ERR(bpf_prog_should_reorder[num_policy])){
++		printk("[syncord] bpf_policy failed\n");
++		return -1;
++	}
++
++	return 0;
++}
++
++static void post_unpatch_callback(patch_object *obj) {
++	extern int num_policy;
++	extern void *bpf_prog_should_reorder[MAX_POLICY];
++
++	bpf_prog_should_reorder[num_policy] = NULL;
++	num_policy--;
++	klp_shadow_free_all(0, NULL);
++}
++KPATCH_PRE_PATCH_CALLBACK(pre_patch_callback);
++KPATCH_POST_UNPATCH_CALLBACK(post_unpatch_callback);
+diff -ruN SynCord-linux-base/kernel/locking/qspinlock.c SynCord-linux-destination/kernel/locking/qspinlock.c
+--- SynCord-linux-base/kernel/locking/qspinlock.c	2023-09-05 14:02:59.719142199 +0000
++++ SynCord-linux-destination/kernel/locking/qspinlock.c	2023-09-06 09:30:33.594107124 +0000
+@@ -29,6 +29,9 @@
+  * Include queued spinlock statistics code
+  */
+ #include "qspinlock_stat.h"
++#include <linux/lock_policy.h>
++#include <linux/filter.h>
++#include <linux/livepatch.h>
+ 
+ /*
+  * The basic principle of a queue-based spinlock can best be understood
+@@ -172,6 +175,8 @@
+ 
+ #define MAX_POLICY 5
+ int num_policy = 0;
++int num_shuffle = 0;
++int num_notshuffle = 0;
+ void *bpf_prog_lock_to_acquire[MAX_POLICY];
+ void *bpf_prog_lock_acquired[MAX_POLICY];
+ void *bpf_prog_lock_to_release[MAX_POLICY];
+@@ -236,7 +241,15 @@
+ // Reordering APIs
+ static int syncord_should_reorder(struct qspinlock *lock, struct mcs_spinlock *node, struct mcs_spinlock *curr, int policy_id)
+ {
+-	return 0;
++	struct bpf_prog *prog;
++	prog = bpf_prog_should_reorder[policy_id];
++
++	struct lock_policy_args args;
++	args.numa_node = node->nid;
++	args.next_numa_node = curr->nid;
++
++	int ret = BPF_PROG_RUN(prog, &args);
++	return ret;
+ }
+ 
+ static int default_cmp_func(struct qspinlock *lock, struct mcs_spinlock *node, struct mcs_spinlock *curr){
+@@ -1018,7 +1031,7 @@
+ 	if (likely(atomic_try_cmpxchg_acquire(&lock->val, &val, _Q_LOCKED_VAL)))
+ 		return;
+ 
+-	queued_spin_lock_slowpath(lock, val, 0, 0);
++	queued_spin_lock_slowpath(lock, val, 1, 1);
+ }
+ EXPORT_SYMBOL(queued_spin_lock);
+ 
+diff -ruN SynCord-linux-base/mm/compaction.c SynCord-linux-destination/mm/compaction.c
+--- SynCord-linux-base/mm/compaction.c	2023-09-05 14:02:59.719142199 +0000
++++ SynCord-linux-destination/mm/compaction.c	2023-09-06 09:30:47.330124496 +0000
+@@ -24,6 +24,7 @@
+ #include <linux/page_owner.h>
+ #include <linux/psi.h>
+ #include "internal.h"
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #ifdef CONFIG_COMPACTION
+ static inline void count_compact_event(enum vm_event_item item)
+@@ -920,8 +921,10 @@
+ 			if (unlikely(__PageMovable(page)) &&
+ 					!PageIsolated(page)) {
+ 				if (locked) {
+-					spin_unlock_irqrestore(&pgdat->lru_lock,
+-									flags);
++					extern int num_policy;
++					my_bpf_spin_unlock_irqrestore(&pgdat->lru_lock,
++								      flags,
++								      num_policy);
+ 					locked = false;
+ 				}
+ 
+@@ -1017,7 +1020,10 @@
+ 		 */
+ 		if (nr_isolated) {
+ 			if (locked) {
+-				spin_unlock_irqrestore(&pgdat->lru_lock, flags);
++				extern int num_policy;
++				my_bpf_spin_unlock_irqrestore(&pgdat->lru_lock,
++							      flags,
++							      num_policy);
+ 				locked = false;
+ 			}
+ 			putback_movable_pages(&cc->migratepages);
+@@ -1043,8 +1049,11 @@
+ 		low_pfn = end_pfn;
+ 
+ isolate_abort:
+-	if (locked)
+-		spin_unlock_irqrestore(&pgdat->lru_lock, flags);
++	if (locked) {
++		extern int num_policy;
++		my_bpf_spin_unlock_irqrestore(&pgdat->lru_lock, flags,
++					      num_policy);
++	}
+ 
+ 	/*
+ 	 * Updated the cached scanner pfn once the pageblock has been scanned
+diff -ruN SynCord-linux-base/mm/huge_memory.c SynCord-linux-destination/mm/huge_memory.c
+--- SynCord-linux-base/mm/huge_memory.c	2023-09-05 14:02:59.719142199 +0000
++++ SynCord-linux-destination/mm/huge_memory.c	2023-09-06 09:30:37.298111390 +0000
+@@ -33,6 +33,7 @@
+ #include <linux/oom.h>
+ #include <linux/numa.h>
+ #include <linux/page_owner.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <asm/tlb.h>
+ #include <asm/pgalloc.h>
+diff -ruN SynCord-linux-base/mm/hugetlb.c SynCord-linux-destination/mm/hugetlb.c
+--- SynCord-linux-base/mm/hugetlb.c	2023-09-04 14:55:43.191292974 +0000
++++ SynCord-linux-destination/mm/hugetlb.c	2023-09-06 09:32:07.006304429 +0000
+@@ -27,6 +27,7 @@
+ #include <linux/swapops.h>
+ #include <linux/jhash.h>
+ #include <linux/numa.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <asm/page.h>
+ #include <asm/pgtable.h>
+@@ -3835,6 +3836,7 @@
+ int huge_add_to_page_cache(struct page *page, struct address_space *mapping,
+ 			   pgoff_t idx)
+ {
++	extern int num_policy;
+ 	struct inode *inode = mapping->host;
+ 	struct hstate *h = hstate_inode(inode);
+ 	int err = add_to_page_cache(page, mapping, idx, GFP_KERNEL);
+@@ -3849,9 +3851,9 @@
+ 	 */
+ 	set_page_dirty(page);
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	inode->i_blocks += blocks_per_huge_page(h);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	return 0;
+ }
+ 
+@@ -4715,6 +4717,7 @@
+ long hugetlb_unreserve_pages(struct inode *inode, long start, long end,
+ 								long freed)
+ {
++	extern int num_policy;
+ 	struct hstate *h = hstate_inode(inode);
+ 	struct resv_map *resv_map = inode_resv_map(inode);
+ 	long chg = 0;
+@@ -4736,9 +4739,9 @@
+ 			return chg;
+ 	}
+ 
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	inode->i_blocks -= (blocks_per_huge_page(h) * freed);
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 
+ 	/*
+ 	 * If the subpool has a minimum size, the number of global
+diff -ruN SynCord-linux-base/mm/shmem.c SynCord-linux-destination/mm/shmem.c
+--- SynCord-linux-base/mm/shmem.c	2023-09-04 14:55:43.191292974 +0000
++++ SynCord-linux-destination/mm/shmem.c	2023-09-06 09:32:07.746306697 +0000
+@@ -38,6 +38,7 @@
+ #include <linux/hugetlb.h>
+ #include <linux/frontswap.h>
+ #include <linux/fs_parser.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include <asm/tlbflush.h> /* for arch/microblaze update_mmu_cache() */
+ 
+@@ -1334,8 +1335,9 @@
+ 	 */
+ 	if (!PageUptodate(page)) {
+ 		if (inode->i_private) {
++			extern int num_policy;
+ 			struct shmem_falloc *shmem_falloc;
+-			spin_lock(&inode->i_lock);
++			my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 			shmem_falloc = inode->i_private;
+ 			if (shmem_falloc &&
+ 			    !shmem_falloc->waitq &&
+@@ -1344,7 +1346,7 @@
+ 				shmem_falloc->nr_unswapped++;
+ 			else
+ 				shmem_falloc = NULL;
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			if (shmem_falloc)
+ 				goto redirty;
+ 		}
+@@ -2014,14 +2016,18 @@
+ 	 * and bloating every shmem inode for this unlikely case would be sad.
+ 	 */
+ 	if (unlikely(inode->i_private)) {
++		extern int num_policy;
++		extern int num_policy;
+ 		struct shmem_falloc *shmem_falloc;
+ 
+-		spin_lock(&inode->i_lock);
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		shmem_falloc = inode->i_private;
+ 		if (shmem_falloc &&
+ 		    shmem_falloc->waitq &&
+ 		    vmf->pgoff >= shmem_falloc->start &&
+ 		    vmf->pgoff < shmem_falloc->next) {
++			extern int num_policy;
++			extern int num_policy;
+ 			wait_queue_head_t *shmem_falloc_waitq;
+ 			DEFINE_WAIT_FUNC(shmem_fault_wait, synchronous_wake_function);
+ 
+@@ -2036,7 +2042,7 @@
+ 			shmem_falloc_waitq = shmem_falloc->waitq;
+ 			prepare_to_wait(shmem_falloc_waitq, &shmem_fault_wait,
+ 					TASK_UNINTERRUPTIBLE);
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			schedule();
+ 
+ 			/*
+@@ -2046,12 +2052,12 @@
+ 			 * finish_wait() does not dereference it in that case;
+ 			 * though i_lock needed lest racing with wake_up_all().
+ 			 */
+-			spin_lock(&inode->i_lock);
++			my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 			finish_wait(shmem_falloc_waitq, &shmem_fault_wait);
+-			spin_unlock(&inode->i_lock);
++			my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 			return ret;
+ 		}
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 	}
+ 
+ 	sgp = SGP_CACHE;
+@@ -2717,6 +2723,9 @@
+ static long shmem_fallocate(struct file *file, int mode, loff_t offset,
+ 							 loff_t len)
+ {
++	extern int num_policy;
++	extern int num_policy;
++	extern int num_policy;
+ 	struct inode *inode = file_inode(file);
+ 	struct shmem_sb_info *sbinfo = SHMEM_SB(inode->i_sb);
+ 	struct shmem_inode_info *info = SHMEM_I(inode);
+@@ -2730,6 +2739,9 @@
+ 	inode_lock(inode);
+ 
+ 	if (mode & FALLOC_FL_PUNCH_HOLE) {
++		extern int num_policy;
++		extern int num_policy;
++		extern int num_policy;
+ 		struct address_space *mapping = file->f_mapping;
+ 		loff_t unmap_start = round_up(offset, PAGE_SIZE);
+ 		loff_t unmap_end = round_down(offset + len, PAGE_SIZE) - 1;
+@@ -2744,9 +2756,9 @@
+ 		shmem_falloc.waitq = &shmem_falloc_waitq;
+ 		shmem_falloc.start = unmap_start >> PAGE_SHIFT;
+ 		shmem_falloc.next = (unmap_end + 1) >> PAGE_SHIFT;
+-		spin_lock(&inode->i_lock);
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		inode->i_private = &shmem_falloc;
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 
+ 		if ((u64)unmap_end > (u64)unmap_start)
+ 			unmap_mapping_range(mapping, unmap_start,
+@@ -2754,11 +2766,11 @@
+ 		shmem_truncate_range(inode, offset, offset + len - 1);
+ 		/* No need to unmap again: hole-punching leaves COWed pages */
+ 
+-		spin_lock(&inode->i_lock);
++		my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 		inode->i_private = NULL;
+ 		wake_up_all(&shmem_falloc_waitq);
+ 		WARN_ON_ONCE(!list_empty(&shmem_falloc_waitq.head));
+-		spin_unlock(&inode->i_lock);
++		my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 		error = 0;
+ 		goto out;
+ 	}
+@@ -2786,9 +2798,9 @@
+ 	shmem_falloc.next  = start;
+ 	shmem_falloc.nr_falloced = 0;
+ 	shmem_falloc.nr_unswapped = 0;
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	inode->i_private = &shmem_falloc;
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ 
+ 	for (index = start; index < end; index++) {
+ 		struct page *page;
+@@ -2838,9 +2850,9 @@
+ 		i_size_write(inode, offset + len);
+ 	inode->i_ctime = current_time(inode);
+ undone:
+-	spin_lock(&inode->i_lock);
++	my_bpf_spin_lock(&inode->i_lock, num_policy);
+ 	inode->i_private = NULL;
+-	spin_unlock(&inode->i_lock);
++	my_bpf_spin_unlock(&inode->i_lock, num_policy);
+ out:
+ 	inode_unlock(inode);
+ 	return error;
+diff -ruN SynCord-linux-base/mm/swap.c SynCord-linux-destination/mm/swap.c
+--- SynCord-linux-base/mm/swap.c	2023-09-05 14:02:59.719142199 +0000
++++ SynCord-linux-destination/mm/swap.c	2023-09-06 09:30:40.710115594 +0000
+@@ -35,6 +35,7 @@
+ #include <linux/uio.h>
+ #include <linux/hugetlb.h>
+ #include <linux/page_idle.h>
++#include <linux/my_bpf_spin_lock.h>
+ 
+ #include "internal.h"
+ 
+@@ -60,16 +61,18 @@
+ static void __page_cache_release(struct page *page)
+ {
+ 	if (PageLRU(page)) {
++		extern int num_policy;
+ 		pg_data_t *pgdat = page_pgdat(page);
+ 		struct lruvec *lruvec;
+ 		unsigned long flags;
+ 
+-		spin_lock_irqsave(&pgdat->lru_lock, flags);
++		my_bpf_spin_lock_irqsave(&pgdat->lru_lock, flags, num_policy);
+ 		lruvec = mem_cgroup_page_lruvec(page, pgdat);
+ 		VM_BUG_ON_PAGE(!PageLRU(page), page);
+ 		__ClearPageLRU(page);
+ 		del_page_from_lru_list(page, lruvec, page_off_lru(page));
+-		spin_unlock_irqrestore(&pgdat->lru_lock, flags);
++		my_bpf_spin_unlock_irqrestore(&pgdat->lru_lock, flags,
++					      num_policy);
+ 	}
+ 	__ClearPageWaiters(page);
+ }
+@@ -201,17 +204,26 @@
+ 		struct pglist_data *pagepgdat = page_pgdat(page);
+ 
+ 		if (pagepgdat != pgdat) {
+-			if (pgdat)
+-				spin_unlock_irqrestore(&pgdat->lru_lock, flags);
++			extern int num_policy;
++			if (pgdat) {
++				extern int num_policy;
++				my_bpf_spin_unlock_irqrestore(&pgdat->lru_lock,
++							      flags,
++							      num_policy);
++			}
+ 			pgdat = pagepgdat;
+-			spin_lock_irqsave(&pgdat->lru_lock, flags);
++			my_bpf_spin_lock_irqsave(&pgdat->lru_lock, flags,
++						 num_policy);
+ 		}
+ 
+ 		lruvec = mem_cgroup_page_lruvec(page, pgdat);
+ 		(*move_fn)(page, lruvec, arg);
+ 	}
+-	if (pgdat)
+-		spin_unlock_irqrestore(&pgdat->lru_lock, flags);
++	if (pgdat) {
++		extern int num_policy;
++		my_bpf_spin_unlock_irqrestore(&pgdat->lru_lock, flags,
++					      num_policy);
++	}
+ 	release_pages(pvec->pages, pvec->nr);
+ 	pagevec_reinit(pvec);
+ }
+@@ -775,7 +787,9 @@
+ 		 * same pgdat. The lock is held only if pgdat != NULL.
+ 		 */
+ 		if (locked_pgdat && ++lock_batch == SWAP_CLUSTER_MAX) {
+-			spin_unlock_irqrestore(&locked_pgdat->lru_lock, flags);
++			extern int num_policy;
++			my_bpf_spin_unlock_irqrestore(&locked_pgdat->lru_lock,
++						      flags, num_policy);
+ 			locked_pgdat = NULL;
+ 		}
+ 
+@@ -784,8 +798,10 @@
+ 
+ 		if (is_zone_device_page(page)) {
+ 			if (locked_pgdat) {
+-				spin_unlock_irqrestore(&locked_pgdat->lru_lock,
+-						       flags);
++				extern int num_policy;
++				my_bpf_spin_unlock_irqrestore(&locked_pgdat->lru_lock,
++							      flags,
++							      num_policy);
+ 				locked_pgdat = NULL;
+ 			}
+ 			/*
+@@ -804,7 +820,10 @@
+ 
+ 		if (PageCompound(page)) {
+ 			if (locked_pgdat) {
+-				spin_unlock_irqrestore(&locked_pgdat->lru_lock, flags);
++				extern int num_policy;
++				my_bpf_spin_unlock_irqrestore(&locked_pgdat->lru_lock,
++							      flags,
++							      num_policy);
+ 				locked_pgdat = NULL;
+ 			}
+ 			__put_compound_page(page);
+@@ -815,12 +834,17 @@
+ 			struct pglist_data *pgdat = page_pgdat(page);
+ 
+ 			if (pgdat != locked_pgdat) {
+-				if (locked_pgdat)
+-					spin_unlock_irqrestore(&locked_pgdat->lru_lock,
+-									flags);
++				extern int num_policy;
++				if (locked_pgdat) {
++					extern int num_policy;
++					my_bpf_spin_unlock_irqrestore(&locked_pgdat->lru_lock,
++								      flags,
++								      num_policy);
++				}
+ 				lock_batch = 0;
+ 				locked_pgdat = pgdat;
+-				spin_lock_irqsave(&locked_pgdat->lru_lock, flags);
++				my_bpf_spin_lock_irqsave(&locked_pgdat->lru_lock,
++							 flags, num_policy);
+ 			}
+ 
+ 			lruvec = mem_cgroup_page_lruvec(page, locked_pgdat);
+@@ -835,8 +859,11 @@
+ 
+ 		list_add(&page->lru, &pages_to_free);
+ 	}
+-	if (locked_pgdat)
+-		spin_unlock_irqrestore(&locked_pgdat->lru_lock, flags);
++	if (locked_pgdat) {
++		extern int num_policy;
++		my_bpf_spin_unlock_irqrestore(&locked_pgdat->lru_lock, flags,
++					      num_policy);
++	}
+ 
+ 	mem_cgroup_uncharge_list(&pages_to_free);
+ 	free_unref_page_list(&pages_to_free);

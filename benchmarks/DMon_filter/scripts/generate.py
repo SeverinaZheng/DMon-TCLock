@@ -113,6 +113,7 @@ if __name__ == "__main__":
 
     already_apply_patch = []
     apply_spin_lock = 0
+    # lock_with_structure = [('spin_lock_irqsave', 'lru_lock', 'spin_unlock_irqrestore', 'lru_lock')]
     for pair in lock_with_structure:
         new_lock = 0
         lock_type = pair[0]
@@ -145,6 +146,7 @@ if __name__ == "__main__":
         lock_unlock_pairs += lock_type + ","+ unlock_type +","
     lock_unlock_pairs = lock_unlock_pairs[:len(lock_unlock_pairs) - 1]
 
+    # lock_unlock_pairs = "spin_lock_irqsave,spin_unlock_irqrestore" 
     change_lock_chain_command = f"python3 adapt_to_bpf.py {lock_unlock_pairs}"
     print(f"({lock_unlock_pairs})")
     length = len(lock_unlock_pairs.split(","))

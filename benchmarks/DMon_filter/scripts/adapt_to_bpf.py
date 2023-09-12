@@ -360,6 +360,7 @@ def write_to_bpf_header(template_path, destination_path,my_bpf_path,lock_unlock)
             content = sourcefile.read()
             lines = content.splitlines()
             reach_function = False
+            add_policy = []
             with open(destination_function_path, 'a') as destination_file:
                 for i, line in enumerate(lines):
                     altered_name = False
@@ -379,12 +380,19 @@ def write_to_bpf_header(template_path, destination_path,my_bpf_path,lock_unlock)
                             line = rewrite(line,True,instruction,lock_unlock)
                             if(line is None):
                                 break
+                            # if this line is broken, then need to add int policy to next line
+                            if ")" not in line:
+                                add_policy.append(int(line_number))
                             reach_function = True
                             altered_name = True
 
                         if reach_function and i == int(line_number) + int(instruction_info[0]) + 1:
                             line = rewrite(line,False,instruction_info[1],lock_unlock)
                     if reach_function:
+                        if any(i == x for x in add_policy):
+                            right_para = line.rfind(")")
+                            line = line[:right_para] + ", int policy" + line[right_para:]
+
                         print(f"{line}")
                         destination_file.write(line)
                         destination_file.write("\n")
@@ -437,8 +445,16 @@ def rewrite(line, is_name,target_instruction,lock_unlock):
         modified = modified.strip()
         if line.startswith("#define"):
             modified = modified + arguments + ", policy" + other_info
+        elif ")" in line:
+            if not line.startswith("static"):
+                modified = "static " +  modified + arguments + ", int policy" + other_info
+            else:
+                modified = modified + arguments + ", int policy" + other_info
         else:
-            modified = modified + arguments + ", int policy" + other_info
+            if not line.startswith("static"):
+                modified = "static " +  modified + arguments + other_info
+            else:
+                modified = modified + arguments + other_info
 
     
     # for situation: #define xxx aaa
