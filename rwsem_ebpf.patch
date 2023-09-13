@@ -1,0 +1,182 @@
+diff -ruN SynCord-linux-rwsem/include/linux/my_bpf_rwsem.h SynCord-linux-another/include/linux/my_bpf_rwsem.h
+--- SynCord-linux-rwsem/include/linux/my_bpf_rwsem.h	1970-01-01 00:00:00.000000000 +0000
++++ SynCord-linux-another/include/linux/my_bpf_rwsem.h	2023-09-13 14:50:18.136831394 +0000
+@@ -0,0 +1,10 @@
++#ifndef MY_BPF_SPIN_H
++#define MY_BPF_SPIN_H
++
++static int __must_check bpf_down_write_killable(struct rw_semaphore *sem, int policy_id)
++{
++        bpf_down_write(sem, policy_id);
++        return 0;
++}
++
++#endif
+Binary files SynCord-linux-rwsem/init/version.o and SynCord-linux-another/init/version.o differ
+diff -ruN SynCord-linux-rwsem/kernel/bpf/inode.c SynCord-linux-another/kernel/bpf/inode.c
+--- SynCord-linux-rwsem/kernel/bpf/inode.c	2023-09-13 09:25:12.842796129 +0000
++++ SynCord-linux-another/kernel/bpf/inode.c	2023-09-13 14:21:01.903817230 +0000
+@@ -701,3 +701,77 @@
+ 	return ret;
+ }
+ fs_initcall(bpf_init);
++
++
++#include "kpatch-macros.h"
++#define MAX_POLICY 5
++
++static inline __u64 ptr_to_u64(const void *ptr)
++{
++    return (__u64) (unsigned long) ptr;
++}
++
++static void *get_pinned_bpf_obj(const char *pathname){
++	struct inode *inode;
++	struct path path;
++	void *raw;
++	int ret;
++
++	/* Let's get BPF prog 1 */
++	ret = kern_path(pathname, LOOKUP_FOLLOW, &path);
++	if (ret){
++		printk("[syncord] %s failed\n", pathname);
++		return ERR_PTR(ret);
++	}
++
++	inode = d_backing_inode(path.dentry);
++	ret = inode_permission(inode, ACC_MODE(2));
++	if(ret){
++		printk("[syncord] perm error\n");
++		path_put(&path);
++		return ERR_PTR(ret);
++	}
++
++	raw = bpf_any_get(inode->i_private, BPF_TYPE_PROG);
++	if(!IS_ERR(raw)){
++		touch_atime(&path);
++	}
++	else{
++		printk("[syncord] raw error\n");
++		path_put(&path);
++		return ERR_PTR(ret);
++	}
++
++	path_put(&path);
++	return raw;
++}
++
++static int pre_patch_callback(patch_object *obj)
++{
++	extern int num_policy;
++	extern void *bpf_prog_should_reorder_rwsem[MAX_POLICY];
++
++	if(num_policy < 4)
++		num_policy++;
++	else
++		return -1;
++
++	bpf_prog_should_reorder_rwsem[num_policy] = get_pinned_bpf_obj("/sys/fs/bpf/numa-grouping");
++	if(IS_ERR(bpf_prog_should_reorder_rwsem[num_policy])){
++		printk("[syncord] bpf_policy failed\n");
++		return -1;
++	}
++
++	return 0;
++}
++
++static void post_unpatch_callback(patch_object *obj) {
++	extern int num_policy;
++	extern void *bpf_prog_should_reorder_rwsem[MAX_POLICY];
++
++	bpf_prog_should_reorder_rwsem[num_policy] = NULL;
++	num_policy--;
++	klp_shadow_free_all(0, NULL);
++}
++KPATCH_PRE_PATCH_CALLBACK(pre_patch_callback);
++KPATCH_POST_UNPATCH_CALLBACK(post_unpatch_callback);
+diff -ruN SynCord-linux-rwsem/kernel/locking/rwsem.c SynCord-linux-another/kernel/locking/rwsem.c
+--- SynCord-linux-rwsem/kernel/locking/rwsem.c	2023-09-13 13:49:07.750108142 +0000
++++ SynCord-linux-another/kernel/locking/rwsem.c	2023-09-13 14:53:48.443509877 +0000
+@@ -19,6 +19,9 @@
+ #include <linux/topology.h>
+ 
+ #include "rwsem.h"
++#include <linux/lock_policy.h>
++#include <linux/filter.h>
++#include <linux/livepatch.h>
+ 
+ static int __aqm_lock_slowpath(struct rwmutex *lock, long state, int is_reader, bool is_bpf, int policy_id);
+ 
+@@ -89,7 +92,18 @@
+ 
+ static int syncord_should_reorder(struct rwmutex *lock, struct rwaqm_node *node, struct rwaqm_node *curr, int policy_id)
+ {
+-	return 0;
++	if (policy_id < 0 ){
++		return 0;
++	}
++	struct bpf_prog *prog;
++	prog = bpf_prog_should_reorder_rwsem[policy_id];
++
++	struct lock_policy_args args;
++	args.numa_node = node->nid;
++	args.next_numa_node = curr->nid;
++
++	int ret = BPF_PROG_RUN(prog, &args);
++	return ret;
+ }
+ 
+ static inline uint32_t xor_random(void)
+@@ -298,7 +312,7 @@
+ 			cmp = syncord_should_reorder(lock,node,curr,policy_id);
+ 		} 
+ 		else {
+-			cmp = syncord_should_reorder(lock,node,curr,0);
++			cmp = syncord_should_reorder(lock,node,curr,-1);
+ 		}
+ 		
+                 /* Check if curr->nid is same as nid */
+diff -ruN SynCord-linux-rwsem/mm/mmap.c SynCord-linux-another/mm/mmap.c
+--- SynCord-linux-rwsem/mm/mmap.c	2023-09-13 09:25:28.510264623 +0000
++++ SynCord-linux-another/mm/mmap.c	2023-09-13 13:25:26.291618922 +0000
+@@ -47,6 +47,7 @@
+ #include <linux/pkeys.h>
+ #include <linux/oom.h>
+ #include <linux/sched/mm.h>
++#include <linux/my_bpf_rwsem.h>
+ 
+ #include <linux/uaccess.h>
+ #include <asm/cacheflush.h>
+@@ -2861,8 +2862,9 @@
+ 	int ret;
+ 	struct mm_struct *mm = current->mm;
+ 	LIST_HEAD(uf);
+-
+-	if (down_write_killable(&mm->mmap_sem))
++	
++	extern int num_policy;
++	if (bpf_down_write_killable(&mm->mmap_sem, num_policy))
+ 		return -EINTR;
+ 
+ 	ret = __do_munmap(mm, start, len, &uf, downgrade);
+diff -ruN SynCord-linux-rwsem/mm/util.c SynCord-linux-another/mm/util.c
+--- SynCord-linux-rwsem/mm/util.c	2023-09-13 09:25:28.530261878 +0000
++++ SynCord-linux-another/mm/util.c	2023-09-13 14:21:29.343407960 +0000
+@@ -23,6 +23,7 @@
+ #include <linux/processor.h>
+ #include <linux/sizes.h>
+ #include <linux/compat.h>
++#include <linux/my_bpf_rwsem.h>
+ 
+ #include <linux/uaccess.h>
+ 
+@@ -491,7 +492,8 @@
+ 
+ 	ret = security_mmap_file(file, prot, flag);
+ 	if (!ret) {
+-		if (down_write_killable(&mm->mmap_sem))
++		extern int num_policy;
++		if (bpf_down_write_killable(&mm->mmap_sem, num_policy))
+ 			return -EINTR;
+ 		ret = do_mmap_pgoff(file, addr, len, prot, flag, pgoff,
+ 				    &populate, &uf);
