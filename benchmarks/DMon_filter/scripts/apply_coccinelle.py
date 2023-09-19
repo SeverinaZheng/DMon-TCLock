@@ -32,7 +32,7 @@ def apply_coccinelle(file_path,file_name):
             new_file_path = file_path + "/new_file.c"
 
             # The new line to be added
-            new_line = "#include <linux/my_bpf_spin_lock.h>\n"
+            new_line = f"#include <linux/my_bpf_{which_lock}.h>\n"
             found_include = False
             inserted = False
             # Open the original file for reading and new file for writing
@@ -60,15 +60,15 @@ def apply_template_patch():
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 5:
-        print("Usage: python adapt_to_bpf.py <lock_type> <structure> <unlock> <apply_spin_lock>")
+    if len(sys.argv) < 6:
+        print("Usage: python apply_coccinelle.py <lock_type> <structure> <unlock> <apply_spin_lock> <which_lock>")
         sys.exit(1)
 
     lock_type = sys.argv[1]
     structure = sys.argv[2]
     unlock_type = sys.argv[3]
     new_lock = sys.argv[4]
-    which_lock = "spin_lock"
+    which_lock = sys.argv[5]
 
     if new_lock == "0" :
         apply_template_patch()

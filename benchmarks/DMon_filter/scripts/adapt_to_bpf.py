@@ -4,7 +4,7 @@ import shutil
 import subprocess
 import re
 
-target_bpf_functions = ['queued_spin_lock_slowpath','queued_spin_lock','queued_spin_unlock_slowpath','queued_spin_unlock']
+target_bpf_functions = ['queued_spin_lock_slowpath','queued_spin_lock','queued_spin_unlock_slowpath','queued_spin_unlock','down_write']
 valid_call_tree = []
 instructions_added = []
 functions_added = []
@@ -66,11 +66,11 @@ def find_function_content(file_path, function_name,line_number):
                     else:
                         start_marker = line
                         start_index = i+2
-                        # print(f"{start_index}")
-                        # print(f"{line}")
+                        #print(f"dd{start_index}")
+                        #print(f"dd{line}")
                 if (line.startswith(end_marker) or line.strip().startswith("} while")) and start_marker is not None and end_index is None:
                     end_index = i
-                    #print(f"{end_index}")
+                    #print(f"end{end_index}")
                     break
             if start_index is not None and end_index is not None:
                 if is_mapping:
@@ -84,7 +84,6 @@ def find_function_content(file_path, function_name,line_number):
             else:
                 return None
 
-            print("=" * 80)  # Separator for clarity
     except FileNotFoundError:
         print(f"Error: The file '{file_path}' could not be found.")
     except Exception as e:
@@ -174,8 +173,8 @@ def find_call_stack(function_name,source_path,lock_unlock):
     try:
         function_info = execute_global_command(function_name,source_path).strip()
         parts = function_info.split()
-        # print(f"{function_name}")
-        # print(f"source files :{parts}")
+        print(f"{function_name}")
+        print(f"source files :{parts}")
         if len(parts) % 2 != 0:
             print("The list must be even length")
         else:
@@ -190,7 +189,7 @@ def find_call_stack(function_name,source_path,lock_unlock):
                 signature = find_function_signature(function_path,function_name,line_number)
                 if (content is None):
                     continue
-                # print(f"content: {content}")
+                print(f"content: {content}")
                 callee = None
                 found = False
                 altered = ""
@@ -218,7 +217,7 @@ def find_call_stack(function_name,source_path,lock_unlock):
                         else:
                             callee = instruction[:index_of_parentheses].strip()
                         if callee in target_bpf_functions:
-                            # print (f"End of Stack: Found:{function_name},{j}")
+                            print (f"End of Stack: Found:{function_name},{j}")
                             add_valid_function(signature,function_path_part, line_number,j,instruction)
                             return True
                         if callee.find(lock_unlock) == -1:
@@ -394,6 +393,7 @@ def write_to_bpf_header(template_path, destination_path,my_bpf_path,lock_unlock)
                             line = line[:right_para] + ", int policy" + line[right_para:]
 
                         print(f"{line}")
+                        print(destination_function_path)
                         destination_file.write(line)
                         destination_file.write("\n")
                     if line == "}":
@@ -522,30 +522,32 @@ def rewrite(line, is_name,target_instruction,lock_unlock):
 
 
 
-def run_all(input_function_name,corresponding_unlock):
+def run_all(input_function_name,corresponding_unlock, which_lock, which_unlock):
     template_path = "/home/syncord/SynCord-linux-template"
     destination_path = "/home/syncord/SynCord-linux-destination"
-    my_bpf_path = f"include/linux/my_bpf_spin_lock.h"
+    my_bpf_path = f"include/linux/my_bpf_{which_lock}.h"
 
 
-    find_call_stack(input_function_name,template_path, "spin_lock")
-    write_to_bpf_header(template_path, destination_path,my_bpf_path,"spin_lock")
+    find_call_stack(input_function_name,template_path, which_lock)
+    write_to_bpf_header(template_path, destination_path,my_bpf_path,which_lock)
     global valid_call_tree 
     valid_call_tree = []
 
-
-    find_call_stack(corresponding_unlock,template_path, "spin_unlock")
-    write_to_bpf_header(template_path, destination_path,my_bpf_path,"spin_unlock")
-    print(function_header_added)
-    valid_call_tree = []
+    if(which_unlock != "None"):
+        find_call_stack(corresponding_unlock,template_path, which_unlock)
+        write_to_bpf_header(template_path, destination_path,my_bpf_path,which_unlock)
+        print(function_header_added)
+        valid_call_tree = []
     
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python adapt_to_bpf.py <lock_unlock_funcs>")
+    if len(sys.argv) < 4:
+        print("Usage: python adapt_to_bpf.py <lock_unlock_funcs> <which_lock> <which_unlock>")
         sys.exit(1)
     lock_unlock_pairs_string = sys.argv[1]
+    which_lock = sys.argv[2]
+    which_unlock = sys.argv[3]
     lock_unlock_pairs =lock_unlock_pairs_string.split(",")
     if len(lock_unlock_pairs) % 2 != 0:
         print("The list must be even length")
@@ -553,4 +555,4 @@ if __name__ == "__main__":
         for i in range(0,len(lock_unlock_pairs)-1,2):
             lock_name = lock_unlock_pairs[i]
             unlock_name = lock_unlock_pairs[i+1]
-            run_all(lock_name,unlock_name)
+            run_all(lock_name,unlock_name, which_lock, which_unlock)

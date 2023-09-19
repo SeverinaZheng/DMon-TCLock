@@ -4,6 +4,10 @@ import shutil
 import os
 
 base_directory = "/home/syncord/SynCord-linux-base" 
+# lock_type = "spin_lock"
+# unlock_type = "spin_unlock"
+target_lock_type = "down_write"
+target_unlock_type = ""
 
 def create_bpf_header(destination_path,my_bpf_path):
     destination_function_path = destination_path + "/" + my_bpf_path
@@ -40,14 +44,14 @@ if __name__ == "__main__":
                     process1.stdout.close()
                     output = process2.communicate()[0].decode('utf-8').strip()
                     print(output)
-                    if "spin_lock" not in target_function:
+                    if target_lock_type not in target_function:
                         file_name, line_number = output.split()
                         process2.stdout.close()
                         # print(f"{file_name},{line_number}")
                    
                         # find_locking will write to lock_def.txt the lock statement
                         # from there we can extract the lock type and which structure it's calling
-                        find_lock_command = f"./find_locking.sh {target_function} {line_number} {file_name}"
+                        find_lock_command = f"./find_locking_{target_lock_type}.sh {target_function} {line_number} {file_name}"
                         process3 = subprocess.Popen(find_lock_command,shell=True)
                 except subprocess.CalledProcessError as e:
                     print(f"Error executing the command: {e}")
@@ -58,6 +62,10 @@ if __name__ == "__main__":
     with open('/home/syncord/DMon-TCLock/benchmarks/DMon_filter/scripts/lock_def.txt', 'r') as file:
         for line in file:
             line = line.strip()
+            # check if it is control flow
+            if (line.startswith("if")):
+                line = line [line.find('(') + 1: line.rfind(')')]
+                line = line + ";"
             skip = 0
             open_parenthesis_index = line.find('(')
             last_arrow_index = line.rfind("->")
@@ -76,7 +84,7 @@ if __name__ == "__main__":
             else:
                 continue
 
-            if(line.endswith(";") and lock_name.startswith("spin_lock")):
+            if(line.endswith(";") and lock_name.startswith(target_lock_type)):
                 for pair in lock_with_structure:
                     if(lock_name == pair[0] and lock_structure == pair[1]):
                         skip = 1
@@ -84,9 +92,9 @@ if __name__ == "__main__":
                 
                 if(skip == 0):
                     lock_with_structure.append((lock_name,lock_structure,"",""))
-            elif (line.endswith(";") and lock_name.startswith("spin_unlock")):
+            elif (line.endswith(";") and target_unlock_type != "" and lock_name.startswith(target_unlock_type)):
                 for index,pair in enumerate(lock_with_structure):
-                    if(pair[0] == "spin_lock" and lock_name == "spin_unlock" and lock_structure == pair[1]):
+                    if(pair[0] == target_lock_type and lock_name == target_unlock_type and lock_structure == pair[1]):
                         lock_with_structure[index] = (pair[0],pair[1],lock_name,lock_structure)
                     else:
                         maybe_lock = pair[0][9:]
@@ -96,6 +104,8 @@ if __name__ == "__main__":
                             lock_with_structure[index] = (pair[0],pair[1],lock_name,lock_structure) 
                             break
 
+
+
     
     print(lock_with_structure)
 
@@ -103,7 +113,7 @@ if __name__ == "__main__":
     template_path = "/home/syncord/SynCord-linux-template"
     destination_path = "/home/syncord/SynCord-linux-destination"
     DMON_dir = "/home/syncord/DMon-TCLock/benchmarks/DMon_filter/"
-    my_bpf_path = f"include/linux/my_bpf_spin_lock.h"
+    my_bpf_path = f"include/linux/my_bpf_{target_lock_type}.h"
 
     if os.path.exists(template_path):
         shutil.rmtree(template_path)
@@ -125,20 +135,32 @@ if __name__ == "__main__":
             new_lock = 1
         else:
             already_apply_patch.append((lock_type,unlock_type))
-        change_func_calling_lock_command = f"python3 apply_coccinelle.py {lock_type} {lock_structure} {unlock_type} {apply_spin_lock} 2>/dev/null"
+
+        if unlock_type == "":
+            unlock_type = lock_type
+
+        change_func_calling_lock_command = f"python3 apply_coccinelle.py {lock_type} {lock_structure} {unlock_type} {apply_spin_lock} {target_lock_type} 2>/dev/null"
         apply_spin_lock = 1
         print(change_func_calling_lock_command)
         process3 = subprocess.Popen(change_func_calling_lock_command,stdout=subprocess.PIPE,shell=True)
         output = process3.communicate()[0].decode('utf-8')
         print(output)
 
+    # subprocess.Popen("make cscope",stdout=subprocess.PIPE,cwd=template_path,shell=True)
+    # time.sleep(40)
+    #copy_cscope = f"cp {template_path}/cscope.* {source_path}/"
+    #subprocess.Popen(copy_cscope,stdout=subprocess.PIPE,cwd=template_path,shell=True)
     # start writing a new header file
     if os.path.exists(destination_path):
         shutil.rmtree(destination_path)
         print("destination already exists")
     shutil.copytree(template_path, destination_path)
+    subprocess.Popen("make cscope",stdout=subprocess.PIPE,cwd=template_path,shell=True)
+    time.sleep(60)
+
 
     create_bpf_header(destination_path,my_bpf_path)
+    time.sleep(5)
     lock_unlock_pairs = ""
     for pair in already_apply_patch:
         lock_type = pair[0]
@@ -146,16 +168,18 @@ if __name__ == "__main__":
         lock_unlock_pairs += lock_type + ","+ unlock_type +","
     lock_unlock_pairs = lock_unlock_pairs[:len(lock_unlock_pairs) - 1]
 
-    # lock_unlock_pairs = "spin_lock_irqsave,spin_unlock_irqrestore" 
-    change_lock_chain_command = f"python3 adapt_to_bpf.py {lock_unlock_pairs}"
-    print(f"({lock_unlock_pairs})")
+   # lock_unlock_pairs = "spin_lock_irqsave,spin_unlock_irqrestore" 
+    if (target_unlock_type == ""):
+        change_lock_chain_command = f"python3 adapt_to_bpf.py {lock_unlock_pairs} {target_lock_type} None"
+    else:
+        change_lock_chain_command = f"python3 adapt_to_bpf.py {lock_unlock_pairs} {target_lock_type} {target_unlock_type}"
+    print(change_lock_chain_command)
     length = len(lock_unlock_pairs.split(","))
-    print(length)
     process4 = subprocess.Popen(change_lock_chain_command,stdout=subprocess.PIPE,shell=True)
     output = process4.communicate()[0].decode('utf-8')
 
     end_bpf_header(destination_path,my_bpf_path)
-    # write ENDIF
+   # write ENDIF
 
     subprocess.Popen("diff -ruN SynCord-linux-base  SynCord-linux-destination > template.patch",stdout=subprocess.PIPE,shell=True,cwd='/home/syncord/')
 
