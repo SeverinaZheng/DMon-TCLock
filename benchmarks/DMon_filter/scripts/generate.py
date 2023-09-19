@@ -4,10 +4,10 @@ import shutil
 import os
 
 base_directory = "/home/syncord/SynCord-linux-base" 
-# lock_type = "spin_lock"
-# unlock_type = "spin_unlock"
-target_lock_type = "down_write"
-target_unlock_type = ""
+target_lock_type = "spin_lock"
+target_unlock_type = "spin_unlock"
+# target_lock_type = "down_write"
+# target_unlock_type = ""
 
 def create_bpf_header(destination_path,my_bpf_path):
     destination_function_path = destination_path + "/" + my_bpf_path

@@ -1,2 +1,2 @@
-vm_mmap_pgoff+0xa2
-__vm_munmap+0x4f
+__alloc_fd+0x33
+__close_fd+0x1f

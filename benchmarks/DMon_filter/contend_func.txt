@@ -1,4 +1,0 @@
-down_write_killable+0x2d
-__x64_sys_brk+0x12f
-__x64_sys_brk+0x216
-__x64_sys_brk+0x22f
