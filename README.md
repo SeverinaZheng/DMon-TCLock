@@ -111,6 +111,8 @@ python3 concord.py --linux /home/syncord/SynCord-linux-base --policy policy/numa
 to compile and follow the [instruction](https://rs3lab.github.io/SynCord/docs/artifact.html) to insert the patch.
 
 
+## Result
+The working patches for will-it-scale is [here](https://github.com/SeverinaZheng/DMon-TCLock/tree/patch/benchmarks/DMon_filter/spin_lock/patches)
 ## Be cautious
 1. when inserting the patch, "ERROR: invalid ancestor" for some random file: kpatch only allows changing c files, not the header files in the original source, which causes inconsistent object files and thus the error.
 2. when inserting the patch, "ld: arch/x86/built-in.a: member arch/x86/mm/extable.o in archive is not an object": the previous build might not be cleaned, so remove and pull the original source code to be the base.
